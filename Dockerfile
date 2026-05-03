@@ -101,6 +101,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         tar \
         unzip \
         xz-utils \
+        git \
     && rm -rf /var/lib/apt/lists/*
 
 # Reuse Go + garble from the builder so we don't re-download.
