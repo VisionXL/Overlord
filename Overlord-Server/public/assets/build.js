@@ -614,6 +614,36 @@ if (rawServerListCheckbox && serverUrlInput) {
   });
 }
 
+const rawServerListHelpBtn = document.getElementById("raw-server-list-help");
+const rawServerListModal = document.getElementById("raw-server-list-modal");
+const rawServerListModalClose = document.getElementById("raw-server-list-modal-close");
+const rawServerListModalOk = document.getElementById("raw-server-list-modal-ok");
+
+function showRawServerListModal() {
+  if (!rawServerListModal) return;
+  rawServerListModal.classList.remove("hidden");
+  rawServerListModal.classList.add("flex");
+}
+function hideRawServerListModal() {
+  if (!rawServerListModal) return;
+  rawServerListModal.classList.remove("flex");
+  rawServerListModal.classList.add("hidden");
+}
+
+if (rawServerListHelpBtn) rawServerListHelpBtn.addEventListener("click", showRawServerListModal);
+if (rawServerListModalClose) rawServerListModalClose.addEventListener("click", hideRawServerListModal);
+if (rawServerListModalOk) rawServerListModalOk.addEventListener("click", hideRawServerListModal);
+if (rawServerListModal) {
+  rawServerListModal.addEventListener("click", (e) => {
+    if (e.target === rawServerListModal) hideRawServerListModal();
+  });
+}
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && rawServerListModal && !rawServerListModal.classList.contains("hidden")) {
+    hideRawServerListModal();
+  }
+});
+
 if (solMemoCheckbox && solSettings) {
   solMemoCheckbox.addEventListener("change", () => {
     const isSol = solMemoCheckbox.checked;
