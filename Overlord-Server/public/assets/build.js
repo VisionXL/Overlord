@@ -501,7 +501,36 @@ function applyCryptableMode(enabled) {
     if (upxC) upxC.classList.add("hidden");
   }
 
+  updateShellcodeCheckboxVisibility();
+
   saveFormSettings();
+}
+
+function applyCryptableShellcodeGate() {
+  const cryptableOn = !!document.getElementById("cryptable-mode")?.checked;
+
+  const setGate = (checkboxId, hintId) => {
+    const cb = document.getElementById(checkboxId);
+    const hint = document.getElementById(hintId);
+    if (!cb) return;
+    const label = cb.closest("label");
+    if (cryptableOn) {
+      cb.disabled = false;
+      label?.classList.remove("opacity-40", "pointer-events-none");
+      if (hint) hint.classList.add("hidden");
+    } else {
+      if (cb.checked) {
+        cb.checked = false;
+        cb.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      cb.disabled = true;
+      label?.classList.add("opacity-40", "pointer-events-none");
+      if (hint) hint.classList.remove("hidden");
+    }
+  };
+
+  setGate("donut-mode", "donut-cryptable-hint");
+  setGate("linux-shellcode-mode", "linux-sc-cryptable-hint");
 }
 
 function updateShellcodeCheckboxVisibility() {
@@ -514,6 +543,8 @@ function updateShellcodeCheckboxVisibility() {
 
   const linuxScRow = document.getElementById("linux-sc-row");
   if (linuxScRow) linuxScRow.classList.toggle("hidden", !hasLinuxAmd64);
+
+  applyCryptableShellcodeGate();
 
   // SGN is only meaningful when there's shellcode to encode — i.e. Donut or
   // Linux shellcode is enabled on a compatible platform.
