@@ -56,6 +56,9 @@ export async function handleSavedScriptsRoutes(
       : "powershell";
 
     const item = saveSavedScript(id, user.userId, name, content, scriptType);
+    if (!item) {
+      return Response.json({ error: "Script id already in use" }, { status: 409 });
+    }
     return Response.json({ ok: true, item });
   }
 

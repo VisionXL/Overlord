@@ -65,6 +65,7 @@ type CreateDeps = {
   pluginState: { enabled: Record<string, boolean>; lastError: Record<string, string> };
   getNotificationConfig: () => NotificationConfigShape;
   canUserAccessClient: (userId: number, userRole: string, clientId: string) => boolean;
+  isClientOwnedByUser: (userId: number, clientId: string) => boolean;
   getUserRole: (userId: number) => string | undefined;
   isClientNotificationsMuted: (clientId: string) => boolean;
   storeNotificationScreenshot: (
@@ -459,7 +460,14 @@ export function createNotificationPluginHandlers(deps: CreateDeps) {
         const sRole = session.userRole ?? session.viewer.data.userRole ?? "";
         const sUserId = session.userId ?? session.viewer.data.userId;
         if (event === "client_purgatory") {
-          if (sRole !== "admin" && sRole !== "operator") continue;
+          if (sRole === "admin") {
+          } else if (sRole === "operator") {
+            if (sUserId === undefined || !deps.isClientOwnedByUser(sUserId, info.id)) {
+              continue;
+            }
+          } else {
+            continue;
+          }
         } else {
           if (sRole !== "admin") {
             if (sUserId === undefined || !deps.canUserAccessClient(sUserId, sRole, info.id)) {
@@ -473,10 +481,17 @@ export function createNotificationPluginHandlers(deps: CreateDeps) {
       const externalTargets = deps.getDeliveryTargetsForClientEvent(event, info.id);
       const pushEnabledByUser = new Map(externalTargets.map((t) => [t.userId, t.clientEventPush]));
 
-      deliverWebPushClientEvent(event, info, deps.canUserAccessClient, deps.getUserRole, (userId) => {
-        const enabled = pushEnabledByUser.get(userId);
-        return enabled !== undefined ? enabled : true;
-      }).catch((err) => logger.warn("[notify] web push client event delivery failed", err));
+      deliverWebPushClientEvent(
+        event,
+        info,
+        deps.canUserAccessClient,
+        deps.getUserRole,
+        (userId) => {
+          const enabled = pushEnabledByUser.get(userId);
+          return enabled !== undefined ? enabled : true;
+        },
+        deps.isClientOwnedByUser,
+      ).catch((err) => logger.warn("[notify] web push client event delivery failed", err));
 
       deliverClientEventToExternalChannels(event, info, externalTargets).catch((err) =>
         logger.warn("[notify] external channel client event delivery failed", err),

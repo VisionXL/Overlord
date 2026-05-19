@@ -58,6 +58,20 @@ export const DEFAULT_TELEGRAM_TEMPLATE =
 const NOTIFICATION_SCREENSHOT_WAIT_MS = 5_000;
 const NOTIFICATION_SCREENSHOT_POLL_MS = 250;
 
+export function isPrivateOrInternalHostname(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  const BLOCKED_HOSTS = ["localhost", "metadata.google.internal", "169.254.169.254"];
+  return (
+    BLOCKED_HOSTS.includes(h) ||
+    h.endsWith(".internal") ||
+    h.startsWith("127.") ||
+    h === "[::1]" ||
+    /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(h) ||
+    h.startsWith("169.254.") ||
+    h.startsWith("0.")
+  );
+}
+
 function getScreenshotMeta(format: string | undefined): { contentType: string; ext: string } {
   const normalized = (format || "jpeg").toLowerCase();
   if (normalized === "png") return { contentType: "image/png", ext: "png" };
@@ -175,16 +189,7 @@ async function deliverToUserWebhook(
   }
 
   const hostname = parsed.hostname.toLowerCase();
-  const BLOCKED_HOSTS = ["localhost", "metadata.google.internal", "169.254.169.254"];
-  if (
-    BLOCKED_HOSTS.includes(hostname) ||
-    hostname.endsWith(".internal") ||
-    hostname.startsWith("127.") ||
-    hostname === "[::1]" ||
-    /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(hostname) ||
-    hostname.startsWith("169.254.") ||
-    hostname.startsWith("0.")
-  ) {
+  if (isPrivateOrInternalHostname(hostname)) {
     logger.warn(`[notify] blocked webhook to private/internal address: ${hostname}`);
     return;
   }
@@ -359,6 +364,7 @@ export async function deliverWebPushClientEvent(
   canUserAccessClient: (userId: number, userRole: string, clientId: string) => boolean,
   getUserRole: (userId: number) => string | undefined,
   isClientEventPushEnabled?: (userId: number) => boolean,
+  isClientOwnedByUser?: (userId: number, clientId: string) => boolean,
 ): Promise<void> {
   const subs = getAllPushSubscriptions();
   if (subs.length === 0) return;
@@ -393,7 +399,14 @@ export async function deliverWebPushClientEvent(
       if (!role) return;
       if (isClientEventPushEnabled && !isClientEventPushEnabled(sub.userId)) return;
       if (event === "client_purgatory") {
-        if (role !== "admin" && role !== "operator") return;
+        if (role === "admin") {
+        } else if (role === "operator") {
+          if (!isClientOwnedByUser || !isClientOwnedByUser(sub.userId, info.id)) {
+            return;
+          }
+        } else {
+          return;
+        }
       } else if (role !== "admin") {
         if (!canUserAccessClient(sub.userId, role, info.id)) return;
       }

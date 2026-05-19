@@ -1,7 +1,7 @@
 import { authenticateRequest } from "../../auth";
 import { logger } from "../../logger";
 import { isIpBanned } from "../../db";
-import { canUserAccessClient, canUserAccessFeature } from "../../users";
+import { canUserAccessClient, canUserAccessFeature, hasPermission } from "../../users";
 import type { FeatureName } from "../../users";
 
 type RequestServer = {
@@ -295,6 +295,9 @@ export async function handleWsUpgradeRoutes(
     const user = await authenticateRequest(req);
     if (!user) {
       return new Response("Unauthorized", { status: 401 });
+    }
+    if (!hasPermission(user.role, "chat:write", user.userId)) {
+      return new Response("Forbidden: Chat access denied", { status: 403 });
     }
     const ip = server.requestIP(req)?.address || "";
     if (server.upgrade(req, { data: { role: "chat_viewer", clientId: "", ip, userRole: user.role, userId: user.userId } })) {

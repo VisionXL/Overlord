@@ -178,7 +178,6 @@ describe("getPermissionDescription", () => {
   const cases: [Permission, string][] = [
     ["users:manage", "Manage users and roles"],
     ["clients:control", "Control clients (execute commands, desktop, console, files)"],
-    ["clients:view", "View connected clients"],
     ["clients:build", "Build client binaries"],
     ["clients:enroll", "Manage client enrollment approvals"],
     ["audit:view", "View audit logs"],

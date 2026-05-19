@@ -2,15 +2,17 @@ import { authenticateRequest } from "../../auth";
 import { AuditAction, logAudit } from "../../auditLog";
 import * as clientManager from "../../clientManager";
 import { getConfig, updateNotificationsConfig } from "../../config";
-import { savePushSubscription, deletePushSubscription, getPushSubscriptionsByUser } from "../../db";
+import { savePushSubscription, deletePushSubscriptionForUser, getPushSubscriptionsByUser } from "../../db";
 import { encodeMessage } from "../../protocol";
 import {
+  canUserAccessClient,
   getUserNotificationSettings,
   updateUserNotificationSettings,
 } from "../../users";
 import {
   DEFAULT_WEBHOOK_TEMPLATE,
   DEFAULT_TELEGRAM_TEMPLATE,
+  isPrivateOrInternalHostname,
   renderNotificationTemplate,
 } from "../notification-delivery";
 import { getVapidPublicKey } from "../web-push";
@@ -20,7 +22,7 @@ type RequestIpProvider = {
 };
 
 type NotificationsRouteDeps = {
-  getNotificationScreenshot: (notificationId: string) => { format?: string; bytes: Uint8Array } | null;
+  getNotificationScreenshot: (notificationId: string) => { format?: string; bytes: Uint8Array; clientId?: string } | null;
   secureHeaders: (contentType?: string) => HeadersInit;
 };
 
@@ -42,6 +44,13 @@ export async function handleNotificationsConfigRoutes(
     const notificationId = decodeURIComponent(screenshotMatch[1]);
     const screenshot = deps.getNotificationScreenshot(notificationId);
     if (!screenshot) {
+      return new Response("Not found", { status: 404 });
+    }
+
+    if (
+      screenshot.clientId &&
+      !canUserAccessClient(user.userId, user.role, screenshot.clientId)
+    ) {
       return new Response("Not found", { status: 404 });
     }
 
@@ -67,8 +76,8 @@ export async function handleNotificationsConfigRoutes(
         headers: { "Content-Type": "application/json" },
       });
     }
-    if (user.role === "viewer") {
-      return new Response("Forbidden: Viewer access denied", { status: 403 });
+    if (user.role !== "admin") {
+      return new Response("Forbidden: Admin access required", { status: 403 });
     }
     return Response.json({ notifications: getConfig().notifications });
   }
@@ -348,6 +357,13 @@ export async function handleNotificationsConfigRoutes(
       return Response.json({ error: "Invalid webhook URL" }, { status: 400 });
     }
 
+    if (isPrivateOrInternalHostname(parsed.hostname.toLowerCase())) {
+      return Response.json(
+        { error: "Webhook URL points at a private/internal address" },
+        { status: 400 },
+      );
+    }
+
     const sampleRecord = {
       id: "preview-notification",
       clientId: "abc123def456",
@@ -489,7 +505,7 @@ export async function handleNotificationsConfigRoutes(
         return Response.json({ error: "Missing endpoint" }, { status: 400 });
       }
 
-      deletePushSubscription(endpoint);
+      deletePushSubscriptionForUser(user.userId, endpoint);
       return Response.json({ ok: true });
     }
   }

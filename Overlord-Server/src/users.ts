@@ -973,10 +973,6 @@ export function canControlClients(role: UserRole): boolean {
   return role === "admin" || role === "operator";
 }
 
-export function canViewClients(role: UserRole): boolean {
-  return role === "admin";
-}
-
 export function canBuildClients(userId: number, role: UserRole): boolean {
   if (role === "admin") return true;
   const user = getUserById(userId);
@@ -997,8 +993,6 @@ export function hasPermission(role: UserRole, permission: string, userId?: numbe
       return canManageUsers(role);
     case "clients:control":
       return canControlClients(role);
-    case "clients:view":
-      return canViewClients(role);
     case "clients:build":
       if (userId !== undefined) return canBuildClients(userId, role);
       return role === "admin" || role === "operator";

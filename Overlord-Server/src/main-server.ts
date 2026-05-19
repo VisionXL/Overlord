@@ -13,7 +13,7 @@ import { v4 as uuidv4 } from "uuid";
 import { authenticateRequest } from "./auth";
 import { loadConfig, getConfig } from "./config";
 import { flushAuditLogsSync } from "./auditLog";
-import { getUserById, getUsersForNotificationDelivery, isClientOwnedByUser, canUserAccessClient, setUserClientAccessRule, setUserClientAccessScope, getUserClientAccessScope, hasPermission } from "./users";
+import { getUserById, getUsersForNotificationDelivery, getUsersForNotificationDeliveryByClientOwnership, isClientOwnedByUser, canUserAccessClient, setUserClientAccessRule, setUserClientAccessScope, getUserClientAccessScope, hasPermission } from "./users";
 import { requireAuth, requirePermission } from "./rbac";
 import { metrics } from "./metrics";
 import { ensureDataDir } from "./paths";
@@ -342,6 +342,7 @@ const notificationPluginHandlers = createNotificationPluginHandlers({
   pluginState,
   getNotificationConfig,
   canUserAccessClient: canUserAccessClient as (userId: number, userRole: string, clientId: string) => boolean,
+  isClientOwnedByUser,
   getUserRole: (userId: number) => getUserById(userId)?.role,
   isClientNotificationsMuted,
   storeNotificationScreenshot: storeNotificationScreenshotForPending,
@@ -349,14 +350,12 @@ const notificationPluginHandlers = createNotificationPluginHandlers({
   forwardPluginEventToRuntime: (clientId, pluginId, event, payload) =>
     pluginRuntime.dispatchClientEvent(clientId, pluginId, event, payload),
   getDeliveryTargetsForClientEvent: (event: string, clientId: string): UserDeliveryTarget[] => {
-    const all = getUsersForNotificationDelivery();
-    let filtered: typeof all;
     if (event === "client_purgatory") {
-      filtered = all.filter((u) => u.role === "admin" || u.role === "operator");
-    } else {
-      filtered = all.filter((u) => canUserAccessClient(u.id, u.role, clientId));
+      return getUsersForNotificationDeliveryByClientOwnership(clientId).map(toDeliveryTarget);
     }
-    return filtered.map(toDeliveryTarget);
+    return getUsersForNotificationDelivery()
+      .filter((u) => canUserAccessClient(u.id, u.role, clientId))
+      .map(toDeliveryTarget);
   },
   savePluginState,
 });

@@ -4,7 +4,6 @@ import { hasPermission, type UserRole } from "./users";
 export type Permission =
   | "users:manage"
   | "clients:control"
-  | "clients:view"
   | "clients:build"
   | "clients:enroll"
   | "audit:view"
@@ -73,8 +72,6 @@ export function getPermissionDescription(permission: Permission): string {
       return "Manage users and roles";
     case "clients:control":
       return "Control clients (execute commands, desktop, console, files)";
-    case "clients:view":
-      return "View connected clients";
     case "clients:build":
       return "Build client binaries";
     case "clients:enroll":
@@ -107,7 +104,6 @@ export function getRolePermissions(role: UserRole): Permission[] {
   if (hasPermission(role, "users:manage")) permissions.push("users:manage");
   if (hasPermission(role, "clients:control"))
     permissions.push("clients:control");
-  if (hasPermission(role, "clients:view")) permissions.push("clients:view");
   if (hasPermission(role, "clients:build")) permissions.push("clients:build");
   if (hasPermission(role, "clients:enroll")) permissions.push("clients:enroll");
   if (hasPermission(role, "audit:view")) permissions.push("audit:view");

@@ -1634,7 +1634,15 @@ export function saveSavedScript(
   name: string,
   content: string,
   scriptType: string,
-): SavedScriptRecord {
+): SavedScriptRecord | null {
+  const owner = db
+    .query<{ user_id: number }, [string]>(
+      `SELECT user_id FROM saved_scripts WHERE id = ?`,
+    )
+    .get(id);
+  if (owner && owner.user_id !== userId) {
+    return null;
+  }
   const now = Date.now();
   db.run(
     `INSERT INTO saved_scripts (id, user_id, name, content, script_type, created_at, updated_at)
@@ -1643,7 +1651,8 @@ export function saveSavedScript(
        name = excluded.name,
        content = excluded.content,
        script_type = excluded.script_type,
-       updated_at = excluded.updated_at`,
+       updated_at = excluded.updated_at
+     WHERE saved_scripts.user_id = excluded.user_id`,
     id,
     userId,
     name,
@@ -2056,6 +2065,15 @@ export function savePushSubscription(userId: number, endpoint: string, p256dh: s
 
 export function deletePushSubscription(endpoint: string): void {
   db.run(`DELETE FROM push_subscriptions WHERE endpoint=?`, endpoint);
+}
+
+export function deletePushSubscriptionForUser(userId: number, endpoint: string): boolean {
+  const result = db.run(
+    `DELETE FROM push_subscriptions WHERE endpoint=? AND user_id=?`,
+    endpoint,
+    userId,
+  );
+  return ((result as any)?.changes || 0) > 0;
 }
 
 export function deletePushSubscriptionsByUser(userId: number): void {

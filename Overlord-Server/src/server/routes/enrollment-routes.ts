@@ -346,11 +346,8 @@ export async function handleEnrollmentRoutes(
   if (req.method === "GET" && url.pathname === "/api/enrollment/banned-ips") {
     const user = await authenticateRequest(req);
     if (!user) return new Response("Unauthorized", { status: 401 });
-    try {
-      requirePermission(user, "clients:enroll");
-    } catch (error) {
-      if (error instanceof Response) return error;
-      return new Response("Forbidden", { status: 403 });
+    if (user.role !== "admin") {
+      return new Response("Forbidden: Admin access required", { status: 403 });
     }
 
     return Response.json({ items: listBannedIps() });
@@ -360,11 +357,8 @@ export async function handleEnrollmentRoutes(
   if (req.method === "DELETE" && url.pathname === "/api/enrollment/banned-ips") {
     const user = await authenticateRequest(req);
     if (!user) return new Response("Unauthorized", { status: 401 });
-    try {
-      requirePermission(user, "clients:enroll");
-    } catch (error) {
-      if (error instanceof Response) return error;
-      return new Response("Forbidden", { status: 403 });
+    if (user.role !== "admin") {
+      return new Response("Forbidden: Admin access required", { status: 403 });
     }
 
     const ipToUnban = (url.searchParams.get("ip") || "").trim();
@@ -390,11 +384,8 @@ export async function handleEnrollmentRoutes(
   if (req.method === "POST" && url.pathname === "/api/enrollment/ban-ip") {
     const user = await authenticateRequest(req);
     if (!user) return new Response("Unauthorized", { status: 401 });
-    try {
-      requirePermission(user, "clients:enroll");
-    } catch (error) {
-      if (error instanceof Response) return error;
-      return new Response("Forbidden", { status: 403 });
+    if (user.role !== "admin") {
+      return new Response("Forbidden: Admin access required", { status: 403 });
     }
 
     let body: any;

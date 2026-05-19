@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
   canUserAccessClient,
-  canViewClients,
   createUser,
   deleteUser,
   getUserByUsername,
@@ -34,12 +33,6 @@ function cleanupCreatedUsers() {
 }
 
 describe("users client access RBAC", () => {
-  test("clients:view permission is admin-only by default", () => {
-    expect(canViewClients("admin")).toBe(true);
-    expect(canViewClients("operator")).toBe(false);
-    expect(canViewClients("viewer")).toBe(false);
-  });
-
   test("new non-admin users default to no client visibility", async () => {
     try {
       const viewer = await createTempUser("viewer");

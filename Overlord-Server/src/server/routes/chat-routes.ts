@@ -16,6 +16,10 @@ export async function handleChatRoutes(
       });
     }
 
+    if (!hasPermission(user.role, "chat:write", user.userId)) {
+      return new Response("Forbidden: Chat access denied", { status: 403 });
+    }
+
     const beforeParam = url.searchParams.get("before");
     const limitParam = url.searchParams.get("limit");
     const before = beforeParam ? Number(beforeParam) : undefined;

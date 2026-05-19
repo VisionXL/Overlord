@@ -158,11 +158,8 @@ export async function handleClientRoutes(
     const user = await authenticateRequest(req);
     if (!user) return new Response("Unauthorized", { status: 401 });
 
-    try {
-      requirePermission(user, "clients:control");
-    } catch (error) {
-      if (error instanceof Response) return error;
-      return new Response("Forbidden", { status: 403 });
+    if (user.role !== "admin") {
+      return new Response("Forbidden: Admin access required", { status: 403 });
     }
 
     if (req.method === "GET") {
