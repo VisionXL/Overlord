@@ -116,6 +116,39 @@ function isAdmin(role) {
   return role === "admin";
 }
 
+function userHas(perm) {
+  return !!currentUser?.permissions?.includes(perm);
+}
+
+function applyPermissionVisibility() {
+  document.querySelectorAll("[data-permission]").forEach((el) => {
+    const perm = el.dataset.permission;
+    if (perm && userHas(perm)) {
+      el.classList.remove("hidden");
+    } else {
+      el.classList.add("hidden");
+    }
+  });
+
+  const sidebar = document.getElementById("settings-sidebar");
+  if (!sidebar) return;
+  const children = Array.from(sidebar.children);
+  for (let i = 0; i < children.length; i++) {
+    const label = children[i];
+    if (!label.classList.contains("settings-nav-group-label")) continue;
+    let hasVisibleLink = false;
+    for (let j = i + 1; j < children.length; j++) {
+      const next = children[j];
+      if (next.classList.contains("settings-nav-group-label")) break;
+      if (next.classList.contains("settings-nav-link") && !next.classList.contains("hidden")) {
+        hasVisibleLink = true;
+        break;
+      }
+    }
+    label.classList.toggle("hidden", !hasVisibleLink);
+  }
+}
+
 function getPasswordRequirementsText() {
   const minLength = Number(securityConfig?.passwordMinLength) || 6;
   const requirements = [`min ${minLength} chars`];
@@ -820,19 +853,6 @@ function initSettingsSidebar() {
   if (!sidebar) return;
   const links = Array.from(sidebar.querySelectorAll(".settings-nav-link"));
 
-  // Hide nav links and group labels whose target sections are admin-only /
-  // admin-or-operator when the current user isn't authorized. We hide rather
-  // than disable so the sidebar stays uncluttered for non-admins.
-  const gated = sidebar.querySelectorAll("[data-admin-only], [data-admin-or-operator]");
-  for (const el of gated) {
-    if (el.dataset.adminOnly !== undefined && !isAdmin(currentUser?.role)) {
-      el.classList.add("hidden");
-    }
-    if (el.dataset.adminOrOperator !== undefined && !canManageBuilds(currentUser?.role)) {
-      el.classList.add("hidden");
-    }
-  }
-
   // Build the section→link map up front so click + observer share it.
   const sectionMap = new Map();
   // sectionsInOrder preserves document order for "last visible at page bottom"
@@ -1340,9 +1360,12 @@ async function handleRemoveInactiveSessions() {
 
 async function loadRegistrationSettings() {
   try {
-    const res = await fetch("/api/settings/registration", { credentials: "include" });
-    if (!res.ok) return;
-    const data = await res.json();
+    const [regRes, groupsRes] = await Promise.all([
+      fetch("/api/settings/registration", { credentials: "include" }),
+      fetch("/api/permission-groups", { credentials: "include" }),
+    ]);
+    if (!regRes.ok) return;
+    const data = await regRes.json();
     const reg = data.registration || {};
     const modeEl = document.getElementById("reg-mode");
     const roleEl = document.getElementById("reg-default-role");
@@ -1350,6 +1373,27 @@ async function loadRegistrationSettings() {
     if (modeEl) modeEl.value = reg.mode || "off";
     if (roleEl) roleEl.value = reg.defaultRole || "operator";
     if (maxEl) maxEl.value = reg.maxUsersTotal ?? 0;
+
+    const listEl = document.getElementById("reg-default-groups-list");
+    if (listEl) {
+      const groups = groupsRes.ok ? (await groupsRes.json()).groups || [] : [];
+      const selected = new Set(reg.defaultGroupIds || []);
+      listEl.innerHTML = groups.length === 0
+        ? `<p class="text-slate-500 text-sm">No groups defined yet. Create one on the <a href="/users" class="text-sky-400 hover:underline">Users page</a>.</p>`
+        : groups
+            .map(
+              (g) => `
+        <label class="flex items-start gap-2 py-1 cursor-pointer hover:bg-slate-800/40 rounded px-2">
+          <input type="checkbox" class="mt-1 h-4 w-4 accent-emerald-500" data-default-group="${g.id}" ${selected.has(g.id) ? "checked" : ""} />
+          <div>
+            <div class="text-sm font-medium text-slate-200">${g.name.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]))}</div>
+            <div class="text-xs text-slate-500">${g.permissions.length} permission${g.permissions.length === 1 ? "" : "s"}</div>
+          </div>
+        </label>`,
+            )
+            .join("");
+    }
+
     updateRegSubsections(reg.mode || "off");
     if (reg.mode === "key") loadRegistrationKeys();
     if (reg.mode === "approval") loadPendingRegistrations();
@@ -1379,13 +1423,16 @@ async function saveRegistrationSettings(e) {
   const mode = document.getElementById("reg-mode")?.value;
   const defaultRole = document.getElementById("reg-default-role")?.value;
   const maxUsersTotal = Number(document.getElementById("reg-max-users")?.value) || 0;
+  const defaultGroupIds = Array.from(
+    document.querySelectorAll("#reg-default-groups-list input[type=checkbox]:checked"),
+  ).map((el) => Number(el.dataset.defaultGroup)).filter((n) => Number.isFinite(n));
 
   try {
     const res = await fetch("/api/settings/registration", {
       method: "PUT",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode, defaultRole, maxUsersTotal }),
+      body: JSON.stringify({ mode, defaultRole, maxUsersTotal, defaultGroupIds }),
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
@@ -1662,19 +1709,10 @@ function initThumbnailHandlers() {
 async function init() {
   try {
     await loadCurrentUser();
+    applyPermissionVisibility();
     loadPrefs();
 
-    if (isAdmin(currentUser?.role) && exportImportSection) {
-      exportImportSection.classList.remove("hidden");
-    }
-
-    if (canManageClientBans(currentUser?.role) && wipeOfflineSection) {
-      wipeOfflineSection.classList.remove("hidden");
-    }
-
-    if (canManageBuilds(currentUser?.role)) {
-      if (buildsSection) buildsSection.classList.remove("hidden");
-      // Hide the "show all" toggle for non-admins
+    if (userHas("clients:build")) {
       if (buildsShowAllWrap && !isAdmin(currentUser?.role)) {
         buildsShowAllWrap.classList.add("hidden");
       }
@@ -1687,14 +1725,7 @@ async function init() {
     await loadChatSettings();
     await loadBannedIps();
 
-    // Registration + Build Rate Limit + Thumbnails (admin only)
-    if (isAdmin(currentUser?.role)) {
-      const regSection = document.getElementById("registration-section");
-      const brlSection = document.getElementById("build-rate-limit-section");
-      const thumbSection = document.getElementById("thumbnails-section");
-      if (regSection) regSection.classList.remove("hidden");
-      if (brlSection) brlSection.classList.remove("hidden");
-      if (thumbSection) thumbSection.classList.remove("hidden");
+    if (userHas("system:configure")) {
       await loadRegistrationSettings();
       await loadBuildRateLimitSettings();
       await loadThumbnailSettings();

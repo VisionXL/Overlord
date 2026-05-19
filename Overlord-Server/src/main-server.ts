@@ -13,7 +13,8 @@ import { v4 as uuidv4 } from "uuid";
 import { authenticateRequest } from "./auth";
 import { loadConfig, getConfig } from "./config";
 import { flushAuditLogsSync } from "./auditLog";
-import { getUserById, getUsersForNotificationDelivery, getUsersForNotificationDeliveryByClientOwnership, isClientOwnedByUser, canUserAccessClient, setUserClientAccessRule, setUserClientAccessScope, getUserClientAccessScope, hasPermission } from "./users";
+import { getUserById, getUsersForNotificationDelivery, getUsersForNotificationDeliveryByClientOwnership, isClientOwnedByUser, canUserAccessClient, setUserClientAccessRule, setUserClientAccessScope, getUserClientAccessScope } from "./users";
+import { hasPermission } from "./rbac";
 import { requireAuth, requirePermission } from "./rbac";
 import { metrics } from "./metrics";
 import { ensureDataDir } from "./paths";
@@ -35,6 +36,7 @@ import { handlePageRoutes } from "./server/routes/page-routes";
 import { handlePluginRoutes } from "./server/routes/plugin-routes";
 import { handleFileShareRoutes } from "./server/routes/file-share-routes";
 import { handleUsersRoutes } from "./server/routes/users-routes";
+import { handlePermissionGroupsRoutes } from "./server/routes/permission-groups-routes";
 import { handleWebSocketClose, handleWebSocketMessage, handleWebSocketOpen } from "./server/routes/websocket-lifecycle-routes";
 import { handleWsUpgradeRoutes } from "./server/routes/ws-upgrade-routes";
 import { handleWebrtcRoutes } from "./server/routes/webrtc-routes";
@@ -724,6 +726,7 @@ async function startServer() {
         (req, url) => handleChatRoutes(req, url),
         (req, url) => handleSolRoutes(req, url),
         (req, url, srv) => handleUsersRoutes(req, url, srv as any),
+        (req, url, srv) => handlePermissionGroupsRoutes(req, url, srv as any),
         (req, url, srv) => handleBuildRoutes(req, url, srv as any, routeDeps.build),
         (req, url, srv) => handleDeployRoutes(req, url, srv as any, routeDeps.deploy),
         (req, url, srv) => handleWinRERoutes(req, url, srv as any, routeDeps.winre),

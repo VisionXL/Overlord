@@ -4,9 +4,9 @@ import {
   createUser,
   deleteUser,
   getUserByUsername,
-  hasPermission,
   setUserCanBuild,
 } from "./users";
+import { hasPermission } from "./rbac";
 
 const createdUserIds: number[] = [];
 

@@ -24,6 +24,7 @@ import {
   recordSuccessfulAttempt,
 } from "../../rateLimit";
 import { getUserById, canUserAccessClient, canUserAccessFeature, getUserFeaturePermissions, type FeatureName, ALL_FEATURES } from "../../users";
+import { getUserPermissions, requirePermission } from "../../rbac";
 import { makeAuthCookie, makeAuthCookieClear } from "./auth-cookie";
 
 type RequestIpProvider = {
@@ -214,8 +215,11 @@ export async function handleAuthRoutes(
     if (!user) {
       return Response.json({ error: "Not authenticated" }, { status: 401 });
     }
-    if (user.role !== "admin") {
-      return Response.json({ error: "Admin only" }, { status: 403 });
+    try {
+      requirePermission(user, "users:manage");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return Response.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const targetUserId = parseInt(url.pathname.split("/")[3]);
@@ -274,8 +278,11 @@ export async function handleAuthRoutes(
     if (!user) {
       return Response.json({ error: "Not authenticated" }, { status: 401 });
     }
-    if (user.role !== "admin") {
-      return Response.json({ error: "Admin only" }, { status: 403 });
+    try {
+      requirePermission(user, "users:manage");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return Response.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const targetUserId = parseInt(url.pathname.split("/")[3]);
@@ -341,6 +348,7 @@ export async function handleAuthRoutes(
 
     const dbUser = getUserById(user.userId);
     const featurePermissions = getUserFeaturePermissions(user.userId);
+    const permissions = getUserPermissions(user.userId, user.role);
 
     return new Response(
       JSON.stringify({
@@ -351,6 +359,7 @@ export async function handleAuthRoutes(
         canBuild: dbUser ? Boolean(dbUser.can_build) : false,
         telegramChatId: dbUser?.telegram_chat_id || "",
         featurePermissions,
+        permissions,
       }),
       {
         headers: { "Content-Type": "application/json" },

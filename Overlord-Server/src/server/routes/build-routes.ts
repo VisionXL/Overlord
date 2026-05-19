@@ -852,10 +852,7 @@ export async function handleBuildRoutes(
     }
 
     if (req.method === "POST" && url.pathname === "/api/build/update-all") {
-      requirePermission(user, "clients:build");
-      if (user.role !== "admin") {
-        return new Response("Forbidden: Admin access required", { status: 403 });
-      }
+      requirePermission(user, "deploys:manage");
 
       let body: any = {};
       try {

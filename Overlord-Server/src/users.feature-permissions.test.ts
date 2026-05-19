@@ -44,6 +44,10 @@ describe("feature permissions", () => {
       "processes",
       "keylogger",
       "voice",
+      "disconnect",
+      "reconnect",
+      "uninstall",
+      "client_metadata",
     ]);
   });
 

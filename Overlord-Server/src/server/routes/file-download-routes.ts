@@ -8,7 +8,7 @@ import { logger } from "../../logger";
 import { encodeMessage } from "../../protocol";
 import { getConfig } from "../../config";
 import { isAuthorizedAgentRequest } from "../agent-auth";
-import { canUserAccessClient, canUserAccessFeature } from "../../users";
+import { requireClientAccess, requireFeatureAccess, requirePermission } from "../../rbac";
 
 type RequestIpProvider = {
   requestIP: (req: Request) => { address?: string } | null | undefined;
@@ -156,12 +156,18 @@ async function serveDownloadById(
   if (!user) {
     return new Response("Unauthorized", { status: 401 });
   }
-  if (user.role !== "admin" && user.role !== "operator") {
-    return new Response("Forbidden: Admin or operator access required", { status: 403 });
+  try {
+    requirePermission(user, "clients:control");
+  } catch (error) {
+    if (error instanceof Response) return error;
+    return new Response("Forbidden", { status: 403 });
   }
 
-  if (!canUserAccessFeature(user.userId, user.role as any, "file_browser")) {
-    return new Response("Forbidden: feature access denied", { status: 403 });
+  try {
+    requireFeatureAccess(user, "file_browser");
+  } catch (error) {
+    if (error instanceof Response) return error;
+    return new Response("Forbidden", { status: 403 });
   }
 
   logger.debug("[filebrowser] http download request", {
@@ -345,8 +351,11 @@ export async function handleFileDownloadRoutes(
     if (!user) {
       return new Response("Unauthorized", { status: 401 });
     }
-    if (user.role !== "admin" && user.role !== "operator") {
-      return new Response("Forbidden: Admin or operator access required", { status: 403 });
+    try {
+      requirePermission(user, "clients:control");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
 
     let body: any = {};
@@ -363,12 +372,12 @@ export async function handleFileDownloadRoutes(
       return new Response("Bad request", { status: 400 });
     }
 
-    if (!canUserAccessClient(user.userId, user.role as any, clientId)) {
-      return new Response("Forbidden: client access denied", { status: 403 });
-    }
-
-    if (!canUserAccessFeature(user.userId, user.role as any, "file_browser")) {
-      return new Response("Forbidden: feature access denied", { status: 403 });
+    try {
+      requireClientAccess(user, clientId);
+      requireFeatureAccess(user, "file_browser");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
 
     logger.debug("[filebrowser] http upload request", {
@@ -412,12 +421,18 @@ export async function handleFileDownloadRoutes(
     if (!user) {
       return new Response("Unauthorized", { status: 401 });
     }
-    if (user.role !== "admin" && user.role !== "operator") {
-      return new Response("Forbidden: Admin or operator access required", { status: 403 });
+    try {
+      requirePermission(user, "clients:control");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
 
-    if (!canUserAccessFeature(user.userId, user.role as any, "file_browser")) {
-      return new Response("Forbidden: feature access denied", { status: 403 });
+    try {
+      requireFeatureAccess(user, "file_browser");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
 
     let uploadId = "";
@@ -642,8 +657,11 @@ export async function handleFileDownloadRoutes(
     if (!user) {
       return new Response("Unauthorized", { status: 401 });
     }
-    if (user.role !== "admin" && user.role !== "operator") {
-      return new Response("Forbidden: Admin or operator access required", { status: 403 });
+    try {
+      requirePermission(user, "clients:control");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
 
     let body: any = {};
@@ -659,12 +677,12 @@ export async function handleFileDownloadRoutes(
       return new Response("Bad request", { status: 400 });
     }
 
-    if (!canUserAccessClient(user.userId, user.role as any, clientId)) {
-      return new Response("Forbidden: client access denied", { status: 403 });
-    }
-
-    if (!canUserAccessFeature(user.userId, user.role as any, "file_browser")) {
-      return new Response("Forbidden: feature access denied", { status: 403 });
+    try {
+      requireClientAccess(user, clientId);
+      requireFeatureAccess(user, "file_browser");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
 
     const target = clientManager.getClient(clientId);

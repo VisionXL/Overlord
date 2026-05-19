@@ -4,8 +4,8 @@ import path from "path";
 import AdmZip from "adm-zip";
 import { v4 as uuidv4 } from "uuid";
 import { authenticateRequest } from "../../auth";
-import { requirePermission } from "../../rbac";
-import { canUserAccessClient, canUserAccessPlugin } from "../../users";
+import { requireClientAccess, requirePermission, requirePluginAccess } from "../../rbac";
+import { canUserAccessPlugin } from "../../users";
 import * as clientManager from "../../clientManager";
 import { metrics } from "../../metrics";
 import { encodeMessage, type PluginSignatureInfo } from "../../protocol";
@@ -146,8 +146,11 @@ export async function handlePluginRoutes(
   if (req.method === "GET" && url.pathname === "/api/plugins/trusted-keys") {
     const user = await authenticateRequest(req);
     if (!user) return new Response("Unauthorized", { status: 401 });
-    if (user.role !== "admin") {
-      return new Response("Forbidden: Admin access required", { status: 403 });
+    try {
+      requirePermission(user, "plugins:configure");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
     const config = getConfig();
     const allKeys = Array.from(new Set([...BUILTIN_TRUSTED_KEYS, ...config.plugins.trustedKeys]));
@@ -157,8 +160,11 @@ export async function handlePluginRoutes(
   if (req.method === "POST" && url.pathname === "/api/plugins/trusted-keys") {
     const user = await authenticateRequest(req);
     if (!user) return new Response("Unauthorized", { status: 401 });
-    if (user.role !== "admin") {
-      return new Response("Forbidden: Admin access required", { status: 403 });
+    try {
+      requirePermission(user, "plugins:configure");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
     let body: any = {};
     try { body = await req.json(); } catch {}
@@ -179,8 +185,11 @@ export async function handlePluginRoutes(
   if (req.method === "DELETE" && trustedKeyDeleteMatch) {
     const user = await authenticateRequest(req);
     if (!user) return new Response("Unauthorized", { status: 401 });
-    if (user.role !== "admin") {
-      return new Response("Forbidden: Admin access required", { status: 403 });
+    try {
+      requirePermission(user, "plugins:configure");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
     const fingerprint = trustedKeyDeleteMatch[1].toLowerCase();
     const config = getConfig();
@@ -203,8 +212,11 @@ export async function handlePluginRoutes(
     }
 
     const clientId = clientPluginsMatch[1];
-    if (!canUserAccessClient(user.userId, user.role, clientId)) {
-      return new Response("Forbidden: You do not have access to this client", { status: 403 });
+    try {
+      requireClientAccess(user, clientId);
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
     const loaded = deps.pluginLoadedByClient.get(clientId) || new Set<string>();
     const manifests = await deps.listPluginManifests();
@@ -226,8 +238,11 @@ export async function handlePluginRoutes(
     if (!user) {
       return new Response("Unauthorized", { status: 401 });
     }
-    if (user.role !== "admin" && user.role !== "operator") {
-      return new Response("Forbidden: Admin or operator access required", { status: 403 });
+    try {
+      requirePermission(user, "plugins:manage");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
 
     let form: FormData;
@@ -321,8 +336,11 @@ export async function handlePluginRoutes(
     if (!user) {
       return new Response("Unauthorized", { status: 401 });
     }
-    if (user.role !== "admin" && user.role !== "operator") {
-      return new Response("Forbidden: Admin or operator access required", { status: 403 });
+    try {
+      requirePermission(user, "plugins:manage");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
     let pluginId = "";
     try {
@@ -368,8 +386,11 @@ export async function handlePluginRoutes(
     if (!user) {
       return new Response("Unauthorized", { status: 401 });
     }
-    if (user.role !== "admin") {
-      return new Response("Forbidden: Admin access required", { status: 403 });
+    try {
+      requirePermission(user, "plugins:configure");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
     let pluginId = "";
     try {
@@ -460,8 +481,11 @@ export async function handlePluginRoutes(
     try { requirePermission(user, "clients:control"); } catch (e) { if (e instanceof Response) return e; return new Response("Forbidden", { status: 403 }); }
     let pluginId = "";
     try { pluginId = deps.sanitizePluginId(pluginDataListMatch[1]); } catch { return new Response("Invalid plugin id", { status: 400 }); }
-    if (!canUserAccessPlugin(user.userId, user.role, pluginId)) {
-      return new Response("Forbidden: You do not have access to this plugin", { status: 403 });
+    try {
+      requirePluginAccess(user, pluginId);
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
     const dataDir = path.join(deps.PLUGIN_ROOT, pluginId, "data");
     await fs.mkdir(dataDir, { recursive: true });
@@ -492,8 +516,11 @@ export async function handlePluginRoutes(
     try { requirePermission(user, "clients:control"); } catch (e) { if (e instanceof Response) return e; return new Response("Forbidden", { status: 403 }); }
     let pluginId = "";
     try { pluginId = deps.sanitizePluginId(pluginDataReadMatch[1]); } catch { return new Response("Invalid plugin id", { status: 400 }); }
-    if (!canUserAccessPlugin(user.userId, user.role, pluginId)) {
-      return new Response("Forbidden: You do not have access to this plugin", { status: 403 });
+    try {
+      requirePluginAccess(user, pluginId);
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
     let relPath = pluginDataReadMatch[2];
     try { relPath = decodeURIComponent(relPath); } catch { return new Response("Bad request", { status: 400 }); }
@@ -517,8 +544,11 @@ export async function handlePluginRoutes(
     try { requirePermission(user, "clients:control"); } catch (e) { if (e instanceof Response) return e; return new Response("Forbidden", { status: 403 }); }
     let pluginId = "";
     try { pluginId = deps.sanitizePluginId(pluginDataWriteMatch[1]); } catch { return new Response("Invalid plugin id", { status: 400 }); }
-    if (!canUserAccessPlugin(user.userId, user.role, pluginId)) {
-      return new Response("Forbidden: You do not have access to this plugin", { status: 403 });
+    try {
+      requirePluginAccess(user, pluginId);
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
     let relPath = pluginDataWriteMatch[2];
     try { relPath = decodeURIComponent(relPath); } catch { return new Response("Bad request", { status: 400 }); }
@@ -558,8 +588,11 @@ export async function handlePluginRoutes(
     try { requirePermission(user, "clients:control"); } catch (e) { if (e instanceof Response) return e; return new Response("Forbidden", { status: 403 }); }
     let pluginId = "";
     try { pluginId = deps.sanitizePluginId(pluginDataDeleteMatch[1]); } catch { return new Response("Invalid plugin id", { status: 400 }); }
-    if (!canUserAccessPlugin(user.userId, user.role, pluginId)) {
-      return new Response("Forbidden: You do not have access to this plugin", { status: 403 });
+    try {
+      requirePluginAccess(user, pluginId);
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
     let relPath = pluginDataDeleteMatch[2];
     try { relPath = decodeURIComponent(relPath); } catch { return new Response("Bad request", { status: 400 }); }
@@ -589,13 +622,19 @@ export async function handlePluginRoutes(
   if (req.method === "POST" && pluginExecMatch) {
     const user = await authenticateRequest(req);
     if (!user) return new Response("Unauthorized", { status: 401 });
-    if (user.role !== "admin") {
-      return new Response("Forbidden: Admin access required", { status: 403 });
+    try {
+      requirePermission(user, "plugins:configure");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
     let pluginId = "";
     try { pluginId = deps.sanitizePluginId(pluginExecMatch[1]); } catch { return new Response("Invalid plugin id", { status: 400 }); }
-    if (!canUserAccessPlugin(user.userId, user.role, pluginId)) {
-      return new Response("Forbidden: You do not have access to this plugin", { status: 403 });
+    try {
+      requirePluginAccess(user, pluginId);
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
     let body: any = {};
     try { body = await req.json(); } catch { return new Response("Bad request", { status: 400 }); }
@@ -657,8 +696,11 @@ export async function handlePluginRoutes(
     if (!user) {
       return new Response("Unauthorized", { status: 401 });
     }
-    if (user.role !== "admin" && user.role !== "operator") {
-      return new Response("Forbidden: Admin or operator access required", { status: 403 });
+    try {
+      requirePermission(user, "plugins:manage");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
 
     let pluginId = "";
@@ -733,12 +775,18 @@ export async function handlePluginRoutes(
       return new Response("Forbidden", { status: 403 });
     }
     const targetId = pluginLoadMatch[1];
-    if (!canUserAccessClient(user.userId, user.role, targetId)) {
-      return new Response("Forbidden: You do not have access to this client", { status: 403 });
+    try {
+      requireClientAccess(user, targetId);
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
     const pluginId = pluginLoadMatch[2];
-    if (!canUserAccessPlugin(user.userId, user.role, pluginId)) {
-      return new Response("Forbidden: You do not have access to this plugin", { status: 403 });
+    try {
+      requirePluginAccess(user, pluginId);
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
     const target = clientManager.getClient(targetId);
     if (!target) return new Response("Not found", { status: 404 });
@@ -793,12 +841,18 @@ export async function handlePluginRoutes(
       return new Response("Forbidden", { status: 403 });
     }
     const targetId = pluginEventsPollMatch[1];
-    if (!canUserAccessClient(user.userId, user.role, targetId)) {
-      return new Response("Forbidden: You do not have access to this client", { status: 403 });
+    try {
+      requireClientAccess(user, targetId);
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
     const pluginId = pluginEventsPollMatch[2];
-    if (!canUserAccessPlugin(user.userId, user.role, pluginId)) {
-      return new Response("Forbidden: You do not have access to this plugin", { status: 403 });
+    try {
+      requirePluginAccess(user, pluginId);
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
     const events = deps.drainPluginUIEvents(targetId, pluginId);
     return Response.json({ events });
@@ -816,12 +870,18 @@ export async function handlePluginRoutes(
     }
 
     const targetId = pluginEventMatch[1];
-    if (!canUserAccessClient(user.userId, user.role, targetId)) {
-      return new Response("Forbidden: You do not have access to this client", { status: 403 });
+    try {
+      requireClientAccess(user, targetId);
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
     const pluginId = pluginEventMatch[2];
-    if (!canUserAccessPlugin(user.userId, user.role, pluginId)) {
-      return new Response("Forbidden: You do not have access to this plugin", { status: 403 });
+    try {
+      requirePluginAccess(user, pluginId);
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
     const target = clientManager.getClient(targetId);
     if (!target) return new Response("Not found", { status: 404 });
@@ -881,12 +941,18 @@ export async function handlePluginRoutes(
     }
 
     const targetId = pluginUnloadMatch[1];
-    if (!canUserAccessClient(user.userId, user.role, targetId)) {
-      return new Response("Forbidden: You do not have access to this client", { status: 403 });
+    try {
+      requireClientAccess(user, targetId);
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
     const pluginId = pluginUnloadMatch[2];
-    if (!canUserAccessPlugin(user.userId, user.role, pluginId)) {
-      return new Response("Forbidden: You do not have access to this plugin", { status: 403 });
+    try {
+      requirePluginAccess(user, pluginId);
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
     const target = clientManager.getClient(targetId);
     if (!target) return new Response("Not found", { status: 404 });
@@ -923,8 +989,11 @@ export async function handlePluginRoutes(
       return new Response("Invalid plugin id", { status: 400 });
     }
 
-    if (!canUserAccessPlugin(user.userId, user.role, pluginId)) {
-      return new Response("Forbidden: You do not have access to this plugin", { status: 403 });
+    try {
+      requirePluginAccess(user, pluginId);
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
 
     if (deps.pluginState.enabled[pluginId] === false) {
@@ -976,8 +1045,11 @@ export async function handlePluginRoutes(
       return new Response("Invalid plugin id", { status: 400 });
     }
 
-    if (!canUserAccessPlugin(user.userId, user.role, pluginId)) {
-      return new Response("Forbidden: You do not have access to this plugin", { status: 403 });
+    try {
+      requirePluginAccess(user, pluginId);
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
 
     if (deps.pluginState.enabled[pluginId] === false) {
@@ -1041,8 +1113,11 @@ export async function handlePluginRoutes(
       return new Response("Invalid plugin id", { status: 400 });
     }
 
-    if (!canUserAccessPlugin(user.userId, user.role, pluginId)) {
-      return new Response("Forbidden: You do not have access to this plugin", { status: 403 });
+    try {
+      requirePluginAccess(user, pluginId);
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
 
     const htmlFile = path.join(deps.PLUGIN_ROOT, pluginId, "assets", `${pluginId}.html`);
@@ -1085,13 +1160,21 @@ export async function handlePluginRoutes(
       return new Response("Invalid plugin id", { status: 400 });
     }
 
-    if (!canUserAccessPlugin(user.userId, user.role, pluginId)) {
-      return new Response("Forbidden: You do not have access to this plugin", { status: 403 });
+    try {
+      requirePluginAccess(user, pluginId);
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
 
     const clientId = url.searchParams.get("clientId") || "";
-    if (clientId && !canUserAccessClient(user.userId, user.role, clientId)) {
-      return new Response("Forbidden: Client access denied", { status: 403 });
+    if (clientId) {
+      try {
+        requireClientAccess(user, clientId);
+      } catch (error) {
+        if (error instanceof Response) return error;
+        return new Response("Forbidden", { status: 403 });
+      }
     }
 
     const htmlFile = path.join(deps.PLUGIN_ROOT, pluginId, "assets", `${pluginId}.html`);
@@ -1180,8 +1263,11 @@ export async function handlePluginRoutes(
     }
 
     const [, pluginId, assetPath] = pluginAssetMatch;
-    if (!canUserAccessPlugin(user.userId, user.role, pluginId)) {
-      return new Response("Forbidden: You do not have access to this plugin", { status: 403 });
+    try {
+      requirePluginAccess(user, pluginId);
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
     let decodedPath = assetPath;
     try {

@@ -1,8 +1,8 @@
 import { authenticateRequest } from "../../auth";
 import { logger } from "../../logger";
 import { isIpBanned } from "../../db";
-import { canUserAccessClient, canUserAccessFeature, hasPermission } from "../../users";
 import type { FeatureName } from "../../users";
+import { hasPermission, requireClientAccess, requireFeatureAccess } from "../../rbac";
 
 type RequestServer = {
   requestIP: (req: Request) => { address?: string } | null | undefined;
@@ -47,11 +47,12 @@ function checkOperatorAccess(
   clientId: string,
   feature: FeatureName,
 ): Response | null {
-  if (!canUserAccessClient(user.userId, user.role as any, clientId)) {
-    return new Response("Forbidden: client access denied", { status: 403 });
-  }
-  if (!canUserAccessFeature(user.userId, user.role as any, feature)) {
-    return new Response("Forbidden: feature access denied", { status: 403 });
+  try {
+    requireClientAccess(user as any, clientId);
+    requireFeatureAccess(user as any, feature);
+  } catch (error) {
+    if (error instanceof Response) return error;
+    return new Response("Forbidden", { status: 403 });
   }
   return null;
 }

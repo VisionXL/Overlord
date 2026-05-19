@@ -110,8 +110,11 @@ export async function handleMiscRoutes(
       return new Response("Unauthorized", { status: 401 });
     }
 
-    if (user.role !== "admin") {
-      return new Response("Forbidden: Admin access required", { status: 403 });
+    try {
+      requirePermission(user, "system:configure");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
 
     if (req.method === "GET") {
@@ -157,8 +160,11 @@ export async function handleMiscRoutes(
       return new Response("Unauthorized", { status: 401 });
     }
 
-    if (user.role !== "admin") {
-      return new Response("Forbidden: Admin access required", { status: 403 });
+    try {
+      requirePermission(user, "system:configure");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
 
     if (req.method === "GET") {
@@ -209,8 +215,11 @@ export async function handleMiscRoutes(
       return new Response("Unauthorized", { status: 401 });
     }
 
-    if (user.role !== "admin") {
-      return new Response("Forbidden: Admin access required", { status: 403 });
+    try {
+      requirePermission(user, "system:configure");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
 
     let body: any = {};
@@ -447,8 +456,11 @@ export async function handleMiscRoutes(
     if (!user) {
       return new Response("Unauthorized", { status: 401 });
     }
-    if (user.role !== "admin") {
-      return new Response("Forbidden: Admin access required", { status: 403 });
+    try {
+      requirePermission(user, "system:configure");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
 
     const exportData = getExportableConfig(deps.SERVER_VERSION);
@@ -477,8 +489,11 @@ export async function handleMiscRoutes(
     if (!user) {
       return new Response("Unauthorized", { status: 401 });
     }
-    if (user.role !== "admin") {
-      return new Response("Forbidden: Admin access required", { status: 403 });
+    try {
+      requirePermission(user, "system:configure");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
 
     let body: any = {};
@@ -526,8 +541,11 @@ export async function handleMiscRoutes(
       return new Response("Unauthorized", { status: 401 });
     }
 
-    if (user.role !== "admin") {
-      return new Response("Forbidden: Admin access required", { status: 403 });
+    try {
+      requirePermission(user, "system:configure");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
 
     if (req.method === "GET") {
@@ -564,8 +582,11 @@ export async function handleMiscRoutes(
     if (!user) {
       return new Response("Unauthorized", { status: 401 });
     }
-    if (user.role !== "admin") {
-      return new Response("Forbidden: Admin access required", { status: 403 });
+    try {
+      requirePermission(user, "system:configure");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
 
     if (req.method === "GET") {
@@ -627,7 +648,7 @@ export async function handleMiscRoutes(
   if (url.pathname === "/api/settings/registration") {
     const user = await authenticateRequest(req);
     if (!user) return new Response("Unauthorized", { status: 401 });
-    if (user.role !== "admin") return new Response("Forbidden: Admin access required", { status: 403 });
+    try { requirePermission(user, "system:configure"); } catch (error) { if (error instanceof Response) return error; return new Response("Forbidden", { status: 403 }); }
 
     if (req.method === "GET") {
       return Response.json({ registration: getConfig().registration }, { headers: deps.CORS_HEADERS });
@@ -643,6 +664,7 @@ export async function handleMiscRoutes(
         mode: body?.mode,
         defaultRole: body?.defaultRole,
         maxUsersTotal: body?.maxUsersTotal !== undefined ? Number(body.maxUsersTotal) : undefined,
+        defaultGroupIds: Array.isArray(body?.defaultGroupIds) ? body.defaultGroupIds : undefined,
       });
 
       logAudit({
@@ -662,7 +684,7 @@ export async function handleMiscRoutes(
   if (url.pathname === "/api/settings/build-rate-limit") {
     const user = await authenticateRequest(req);
     if (!user) return new Response("Unauthorized", { status: 401 });
-    if (user.role !== "admin") return new Response("Forbidden: Admin access required", { status: 403 });
+    try { requirePermission(user, "system:configure"); } catch (error) { if (error instanceof Response) return error; return new Response("Forbidden", { status: 403 }); }
 
     if (req.method === "GET") {
       return Response.json({ buildRateLimit: getConfig().buildRateLimit }, { headers: deps.CORS_HEADERS });
@@ -703,7 +725,7 @@ export async function handleMiscRoutes(
     }
 
     if (req.method === "PUT") {
-      if (user.role !== "admin") return new Response("Forbidden: Admin access required", { status: 403 });
+      try { requirePermission(user, "system:configure"); } catch (error) { if (error instanceof Response) return error; return new Response("Forbidden", { status: 403 }); }
 
       let body: any = {};
       try { body = await req.json(); } catch {

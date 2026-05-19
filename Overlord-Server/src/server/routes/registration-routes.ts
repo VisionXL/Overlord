@@ -2,6 +2,7 @@ import { authenticateRequest } from "../../auth";
 import { AuditAction, logAudit } from "../../auditLog";
 import { getConfig } from "../../config";
 import { logger } from "../../logger";
+import { requirePermission } from "../../rbac";
 import {
   registerUser,
   deleteUser,
@@ -225,7 +226,12 @@ export async function handleRegistrationRoutes(
   if (req.method === "GET" && url.pathname === "/api/registration/keys") {
     const user = await authenticateRequest(req);
     if (!user) return new Response("Unauthorized", { status: 401 });
-    if (user.role !== "admin") return new Response("Forbidden", { status: 403 });
+    try {
+      requirePermission(user, "users:manage");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
+    }
 
     const keys = listRegistrationKeys();
     return Response.json({ keys });
@@ -234,7 +240,12 @@ export async function handleRegistrationRoutes(
   if (req.method === "POST" && url.pathname === "/api/registration/keys") {
     const user = await authenticateRequest(req);
     if (!user) return new Response("Unauthorized", { status: 401 });
-    if (user.role !== "admin") return new Response("Forbidden", { status: 403 });
+    try {
+      requirePermission(user, "users:manage");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
+    }
 
     let body: any;
     try {
@@ -267,7 +278,12 @@ export async function handleRegistrationRoutes(
   if (req.method === "DELETE" && url.pathname.match(/^\/api\/registration\/keys\/\d+$/)) {
     const user = await authenticateRequest(req);
     if (!user) return new Response("Unauthorized", { status: 401 });
-    if (user.role !== "admin") return new Response("Forbidden", { status: 403 });
+    try {
+      requirePermission(user, "users:manage");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
+    }
 
     const keyId = Number(url.pathname.split("/").pop());
     if (!keyId || !Number.isFinite(keyId)) {
@@ -296,7 +312,12 @@ export async function handleRegistrationRoutes(
   if (req.method === "GET" && url.pathname === "/api/registration/keys/export") {
     const user = await authenticateRequest(req);
     if (!user) return new Response("Unauthorized", { status: 401 });
-    if (user.role !== "admin") return new Response("Forbidden", { status: 403 });
+    try {
+      requirePermission(user, "users:manage");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
+    }
 
     const keys = listRegistrationKeys();
     const exportData = keys.map((k) => ({
@@ -319,7 +340,12 @@ export async function handleRegistrationRoutes(
   if (req.method === "GET" && url.pathname === "/api/registration/pending") {
     const user = await authenticateRequest(req);
     if (!user) return new Response("Unauthorized", { status: 401 });
-    if (user.role !== "admin") return new Response("Forbidden", { status: 403 });
+    try {
+      requirePermission(user, "users:manage");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
+    }
 
     const pending = listPendingRegistrations();
     return Response.json({
@@ -336,7 +362,12 @@ export async function handleRegistrationRoutes(
   if (req.method === "POST" && url.pathname.match(/^\/api\/registration\/pending\/\d+\/approve$/)) {
     const user = await authenticateRequest(req);
     if (!user) return new Response("Unauthorized", { status: 401 });
-    if (user.role !== "admin") return new Response("Forbidden", { status: 403 });
+    try {
+      requirePermission(user, "users:manage");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
+    }
 
     const pendingId = Number(url.pathname.split("/")[4]);
     if (!pendingId || !Number.isFinite(pendingId)) {
@@ -371,7 +402,12 @@ export async function handleRegistrationRoutes(
   if (req.method === "POST" && url.pathname.match(/^\/api\/registration\/pending\/\d+\/deny$/)) {
     const user = await authenticateRequest(req);
     if (!user) return new Response("Unauthorized", { status: 401 });
-    if (user.role !== "admin") return new Response("Forbidden", { status: 403 });
+    try {
+      requirePermission(user, "users:manage");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
+    }
 
     const pendingId = Number(url.pathname.split("/")[4]);
     if (!pendingId || !Number.isFinite(pendingId)) {

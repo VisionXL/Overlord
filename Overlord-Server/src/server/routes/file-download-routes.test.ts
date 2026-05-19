@@ -395,7 +395,7 @@ describe("file route feature_browser enforcement", () => {
 
       expect(res).not.toBeNull();
       expect(res!.status).toBe(403);
-      expect(await res!.text()).toContain("client access denied");
+      expect(await res!.text()).toContain("do not have access to this client");
     } finally {
       clientManager.deleteClient(clientId);
       deleteUser(auth.userId);

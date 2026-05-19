@@ -40,8 +40,11 @@ export async function handleAutoScriptsRoutes(
         headers: { "Content-Type": "application/json" },
       });
     }
-    if (user.role !== "admin") {
-      return new Response("Forbidden: Admin access required", { status: 403 });
+    try {
+      requirePermission(user, "scripts:manage");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
 
     let body: any = {};
@@ -95,8 +98,11 @@ export async function handleAutoScriptsRoutes(
         headers: { "Content-Type": "application/json" },
       });
     }
-    if (user.role !== "admin") {
-      return new Response("Forbidden: Admin access required", { status: 403 });
+    try {
+      requirePermission(user, "scripts:manage");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
 
     let body: any = {};
@@ -147,8 +153,11 @@ export async function handleAutoScriptsRoutes(
         headers: { "Content-Type": "application/json" },
       });
     }
-    if (user.role !== "admin") {
-      return new Response("Forbidden: Admin access required", { status: 403 });
+    try {
+      requirePermission(user, "scripts:manage");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
 
     deleteAutoScript(autoScriptMatch[1]);

@@ -29,7 +29,7 @@ import {
 } from "../../db";
 import { metrics } from "../../metrics";
 import { encodeMessage } from "../../protocol";
-import { requirePermission } from "../../rbac";
+import { requireClientAccess, requireFeatureAccess, requirePermission } from "../../rbac";
 import {
   canUserAccessClient,
   getUserClientAccessScope,
@@ -158,8 +158,11 @@ export async function handleClientRoutes(
     const user = await authenticateRequest(req);
     if (!user) return new Response("Unauthorized", { status: 401 });
 
-    if (user.role !== "admin") {
-      return new Response("Forbidden: Admin access required", { status: 403 });
+    try {
+      requirePermission(user, "network:manage-bans");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
 
     if (req.method === "GET") {
@@ -208,8 +211,11 @@ export async function handleClientRoutes(
     }
 
     const targetId = banMatch[1];
-    if (!canUserAccessClient(user.userId, user.role, targetId)) {
-      return new Response("Forbidden: Client access denied", { status: 403 });
+    try {
+      requireClientAccess(user, targetId);
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
     const target = clientManager.getClient(targetId);
     const targetIp = target?.ip || getClientIp(targetId);
@@ -247,8 +253,11 @@ export async function handleClientRoutes(
       return new Response("Unauthorized", { status: 401 });
     }
     const clientId = thumbnailMatch[1];
-    if (!canUserAccessClient(user.userId, user.role, clientId)) {
-      return new Response("Forbidden: Client access denied", { status: 403 });
+    try {
+      requireClientAccess(user, clientId);
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
     const { requestThumbnailRegen, markThumbnailRequested, getThumbnailVersion, waitForThumbnail, clearThumbnailRequest } = await import("../../thumbnails");
     markThumbnailRequested(clientId);
@@ -286,8 +295,11 @@ export async function handleClientRoutes(
       return new Response("Unauthorized", { status: 401 });
     }
     const clientId = thumbnailMatch[1];
-    if (!canUserAccessClient(user.userId, user.role, clientId)) {
-      return new Response("Forbidden: Client access denied", { status: 403 });
+    try {
+      requireClientAccess(user, clientId);
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
     const { getThumbnailRecord } = await import("../../thumbnails");
     const record = getThumbnailRecord(clientId);
@@ -349,8 +361,11 @@ export async function handleClientRoutes(
     }
 
     const targetId = clientDeleteMatch[1];
-    if (!canUserAccessClient(user.userId, user.role, targetId)) {
-      return new Response("Forbidden: Client access denied", { status: 403 });
+    try {
+      requireClientAccess(user, targetId);
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
     const target = clientManager.getClient(targetId);
     const isOnlineInDb = getClientOnlineState(targetId);
@@ -399,15 +414,19 @@ export async function handleClientRoutes(
     if (!user) return new Response("Unauthorized", { status: 401 });
 
     try {
-      requirePermission(user, "clients:control");
+      requirePermission(user, "clients:metadata");
+      requireFeatureAccess(user, "client_metadata");
     } catch (error) {
       if (error instanceof Response) return error;
       return new Response("Forbidden", { status: 403 });
     }
 
     const targetId = clientNicknameMatch[1];
-    if (!canUserAccessClient(user.userId, user.role, targetId)) {
-      return new Response("Forbidden: Client access denied", { status: 403 });
+    try {
+      requireClientAccess(user, targetId);
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
     if (!clientExists(targetId)) {
       return Response.json({ error: "Client not found" }, { status: 404 });
@@ -456,15 +475,19 @@ export async function handleClientRoutes(
     if (!user) return new Response("Unauthorized", { status: 401 });
 
     try {
-      requirePermission(user, "clients:control");
+      requirePermission(user, "clients:metadata");
+      requireFeatureAccess(user, "client_metadata");
     } catch (error) {
       if (error instanceof Response) return error;
       return new Response("Forbidden", { status: 403 });
     }
 
     const targetId = clientTagMatch[1];
-    if (!canUserAccessClient(user.userId, user.role, targetId)) {
-      return new Response("Forbidden: Client access denied", { status: 403 });
+    try {
+      requireClientAccess(user, targetId);
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
     if (!clientExists(targetId)) {
       return Response.json({ error: "Client not found" }, { status: 404 });
@@ -517,7 +540,7 @@ export async function handleClientRoutes(
   if (req.method === "PATCH" && url.pathname === "/api/clients/bulk-notifications-muted") {
     const user = await authenticateRequest(req);
     if (!user) return new Response("Unauthorized", { status: 401 });
-    try { requirePermission(user, "clients:control"); } catch (error) {
+    try { requirePermission(user, "clients:metadata"); requireFeatureAccess(user, "client_metadata"); } catch (error) {
       if (error instanceof Response) return error;
       return new Response("Forbidden", { status: 403 });
     }
@@ -555,14 +578,17 @@ export async function handleClientRoutes(
   if (req.method === "PATCH" && muteMatch) {
     const user = await authenticateRequest(req);
     if (!user) return new Response("Unauthorized", { status: 401 });
-    try { requirePermission(user, "clients:control"); } catch (error) {
+    try { requirePermission(user, "clients:metadata"); requireFeatureAccess(user, "client_metadata"); } catch (error) {
       if (error instanceof Response) return error;
       return new Response("Forbidden", { status: 403 });
     }
 
     const targetId = muteMatch[1];
-    if (!canUserAccessClient(user.userId, user.role, targetId)) {
-      return new Response("Forbidden: Client access denied", { status: 403 });
+    try {
+      requireClientAccess(user, targetId);
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
     if (!clientExists(targetId)) {
       return Response.json({ error: "Client not found" }, { status: 404 });
@@ -602,8 +628,11 @@ export async function handleClientRoutes(
     if (!user) return new Response("Unauthorized", { status: 401 });
 
     const targetId = bookmarkMatch[1];
-    if (!canUserAccessClient(user.userId, user.role, targetId)) {
-      return new Response("Forbidden: Client access denied", { status: 403 });
+    try {
+      requireClientAccess(user, targetId);
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
     if (!clientExists(targetId)) {
       return Response.json({ error: "Client not found" }, { status: 404 });
@@ -639,8 +668,11 @@ export async function handleClientRoutes(
       }
 
       const targetId = cmdMatch[1];
-      if (!canUserAccessClient(user.userId, user.role, targetId)) {
-        return new Response("Forbidden: Client access denied", { status: 403 });
+      try {
+        requireClientAccess(user, targetId);
+      } catch (error) {
+        if (error instanceof Response) return error;
+        return new Response("Forbidden", { status: 403 });
       }
       const target = clientManager.getClient(targetId);
       const ip = server.requestIP(req)?.address || "unknown";
@@ -661,6 +693,13 @@ export async function handleClientRoutes(
           for (let i = 0; i < count; i++) {
           }
         } else if (action === "disconnect") {
+          try {
+            requirePermission(user, "clients:disconnect");
+            requireFeatureAccess(user, "disconnect");
+          } catch (error) {
+            if (error instanceof Response) return error;
+            return new Response("Forbidden", { status: 403 });
+          }
           target.ws.send(encodeMessage({ type: "command", commandType: "disconnect", id: uuidv4() }));
           metrics.recordCommand("disconnect");
           logAudit({
@@ -672,6 +711,13 @@ export async function handleClientRoutes(
             success: true,
           });
         } else if (action === "reconnect") {
+          try {
+            requirePermission(user, "clients:reconnect");
+            requireFeatureAccess(user, "reconnect");
+          } catch (error) {
+            if (error instanceof Response) return error;
+            return new Response("Forbidden", { status: 403 });
+          }
           target.ws.send(encodeMessage({ type: "command", commandType: "reconnect", id: uuidv4() }));
           metrics.recordCommand("reconnect");
           logAudit({
@@ -774,8 +820,11 @@ export async function handleClientRoutes(
             return Response.json({ ok: false, error: error.message || "Voice capability probe failed" }, { status: 504 });
           }
         } else if (action === "silent_exec") {
-          if (user.role !== "admin") {
-            return new Response("Forbidden: Admin access required", { status: 403 });
+          try {
+            requirePermission(user, "clients:silent-exec");
+          } catch (error) {
+            if (error instanceof Response) return error;
+            return new Response("Forbidden", { status: 403 });
           }
 
           const command = typeof body?.command === "string" ? body.command.trim() : "";
@@ -806,6 +855,13 @@ export async function handleClientRoutes(
             details: JSON.stringify({ command, args, cwd }),
           });
         } else if (action === "uninstall") {
+          try {
+            requirePermission(user, "clients:uninstall");
+            requireFeatureAccess(user, "uninstall");
+          } catch (error) {
+            if (error instanceof Response) return error;
+            return new Response("Forbidden", { status: 403 });
+          }
           target.ws.send(encodeMessage({ type: "command", commandType: "uninstall", id: uuidv4() }));
           metrics.recordCommand("uninstall");
           clientManager.deleteClient(targetId);
@@ -821,8 +877,11 @@ export async function handleClientRoutes(
             success: true,
           });
         } else if (action === "elevate") {
-          if (user.role !== "admin") {
-            return new Response("Forbidden: Admin access required", { status: 403 });
+          try {
+            requirePermission(user, "clients:silent-exec");
+          } catch (error) {
+            if (error instanceof Response) return error;
+            return new Response("Forbidden", { status: 403 });
           }
 
           const password = typeof body?.password === "string" ? body.password : "";
@@ -980,7 +1039,7 @@ export async function handleClientRoutes(
   if (req.method === "PATCH" && url.pathname === "/api/clients/bulk-group") {
     const user = await authenticateRequest(req);
     if (!user) return new Response("Unauthorized", { status: 401 });
-    try { requirePermission(user, "clients:control"); } catch (error) {
+    try { requirePermission(user, "clients:metadata"); requireFeatureAccess(user, "client_metadata"); } catch (error) {
       if (error instanceof Response) return error;
       return new Response("Forbidden", { status: 403 });
     }
@@ -1019,14 +1078,17 @@ export async function handleClientRoutes(
   if (req.method === "PATCH" && clientGroupMatch) {
     const user = await authenticateRequest(req);
     if (!user) return new Response("Unauthorized", { status: 401 });
-    try { requirePermission(user, "clients:control"); } catch (error) {
+    try { requirePermission(user, "clients:metadata"); requireFeatureAccess(user, "client_metadata"); } catch (error) {
       if (error instanceof Response) return error;
       return new Response("Forbidden", { status: 403 });
     }
 
     const targetId = clientGroupMatch[1];
-    if (!canUserAccessClient(user.userId, user.role, targetId)) {
-      return new Response("Forbidden: Client access denied", { status: 403 });
+    try {
+      requireClientAccess(user, targetId);
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
     if (!clientExists(targetId)) {
       return Response.json({ error: "Client not found" }, { status: 404 });

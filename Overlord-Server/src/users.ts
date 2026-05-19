@@ -63,6 +63,15 @@ type UserAccessCacheEntry = {
 const userAccessCache = new Map<number, UserAccessCacheEntry>();
 let notificationDeliveryCache: UserDeliveryRow[] | null = null;
 
+type AccessCheck<E extends any[]> = (userId: number, role: UserRole, ...extra: E) => boolean;
+
+function withAdminBypass<E extends any[]>(check: AccessCheck<E>): AccessCheck<E> {
+  return (userId, role, ...extra) => {
+    if (role === "admin") return true;
+    return check(userId, role, ...extra);
+  };
+}
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -115,147 +124,170 @@ db.exec(
   `CREATE INDEX IF NOT EXISTS idx_user_plugin_access_rules_user ON user_plugin_access_rules(user_id)`,
 );
 
-try {
-  db.exec(
-    `ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0`,
-  );
-  logger.info("[users] Added must_change_password column to existing database");
-} catch (err: any) {
-  if (!err.message?.includes("duplicate column name")) {
-    logger.error("[users] Migration error:", err);
-  }
-}
-
-try {
-  db.exec(
-    `ALTER TABLE users ADD COLUMN client_scope TEXT NOT NULL DEFAULT 'none' CHECK(client_scope IN ('none', 'allowlist', 'denylist', 'all'))`,
-  );
-  logger.info("[users] Added client_scope column to existing database");
-} catch (err: any) {
-  if (!err.message?.includes("duplicate column name")) {
-    logger.error("[users] Migration error:", err);
-  }
-}
-
-try {
-  db.exec(`UPDATE users SET client_scope='all' WHERE role='admin'`);
-} catch (err: any) {
-  logger.error("[users] Failed to normalize admin client_scope:", err);
-}
-
-try {
-  db.exec(
-    `ALTER TABLE users ADD COLUMN can_build INTEGER NOT NULL DEFAULT 0`,
-  );
-  logger.info("[users] Added can_build column to existing database");
-
+function addColumnIfMissing(table: string, definition: string): void {
   try {
-    db.exec(`UPDATE users SET can_build=1 WHERE role='admin' OR role='operator'`);
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${definition}`);
   } catch (err: any) {
-    logger.error("[users] Failed to backfill admin/operator can_build:", err);
-  }
-} catch (err: any) {
-  if (!err.message?.includes("duplicate column name")) {
-    logger.error("[users] Migration error:", err);
+    if (!err?.message?.includes("duplicate column name")) throw err;
   }
 }
 
-try {
-  db.exec(
-    `ALTER TABLE users ADD COLUMN telegram_chat_id TEXT DEFAULT NULL`,
-  );
-  logger.info("[users] Added telegram_chat_id column to existing database");
-} catch (err: any) {
-  if (!err.message?.includes("duplicate column name")) {
-    logger.error("[users] Migration error:", err);
-  }
-}
+type Migration = { id: string; run: () => void };
 
-const notificationColumns: Array<{ sql: string; label: string }> = [
-  { sql: `ALTER TABLE users ADD COLUMN webhook_enabled INTEGER DEFAULT 0`, label: "webhook_enabled" },
-  { sql: `ALTER TABLE users ADD COLUMN webhook_url TEXT DEFAULT NULL`, label: "webhook_url" },
-  { sql: `ALTER TABLE users ADD COLUMN webhook_template TEXT DEFAULT NULL`, label: "webhook_template" },
-  { sql: `ALTER TABLE users ADD COLUMN telegram_enabled INTEGER DEFAULT 0`, label: "telegram_enabled" },
-  { sql: `ALTER TABLE users ADD COLUMN telegram_bot_token TEXT DEFAULT NULL`, label: "telegram_bot_token" },
-  { sql: `ALTER TABLE users ADD COLUMN telegram_template TEXT DEFAULT NULL`, label: "telegram_template" },
+const userMigrations: Migration[] = [
+  {
+    id: "001_users_must_change_password",
+    run: () => addColumnIfMissing("users", `must_change_password INTEGER DEFAULT 0`),
+  },
+  {
+    id: "002_users_client_scope",
+    run: () => {
+      addColumnIfMissing(
+        "users",
+        `client_scope TEXT NOT NULL DEFAULT 'none' CHECK(client_scope IN ('none', 'allowlist', 'denylist', 'all'))`,
+      );
+      db.exec(`UPDATE users SET client_scope='all' WHERE role='admin'`);
+    },
+  },
+  {
+    id: "003_users_can_build",
+    run: () => {
+      addColumnIfMissing("users", `can_build INTEGER NOT NULL DEFAULT 0`);
+      db.exec(`UPDATE users SET can_build=1 WHERE role='admin' OR role='operator'`);
+    },
+  },
+  {
+    id: "004_users_telegram_chat_id",
+    run: () => addColumnIfMissing("users", `telegram_chat_id TEXT DEFAULT NULL`),
+  },
+  {
+    id: "005_users_notification_delivery",
+    run: () => {
+      addColumnIfMissing("users", `webhook_enabled INTEGER DEFAULT 0`);
+      addColumnIfMissing("users", `webhook_url TEXT DEFAULT NULL`);
+      addColumnIfMissing("users", `webhook_template TEXT DEFAULT NULL`);
+      addColumnIfMissing("users", `telegram_enabled INTEGER DEFAULT 0`);
+      addColumnIfMissing("users", `telegram_bot_token TEXT DEFAULT NULL`);
+      addColumnIfMissing("users", `telegram_template TEXT DEFAULT NULL`);
+    },
+  },
+  {
+    id: "006_users_can_upload_files",
+    run: () => {
+      addColumnIfMissing("users", `can_upload_files INTEGER NOT NULL DEFAULT 0`);
+      db.exec(`UPDATE users SET can_upload_files=1 WHERE role='admin'`);
+    },
+  },
+  {
+    id: "007_users_client_event_filters",
+    run: () => {
+      addColumnIfMissing("users", `client_event_webhook INTEGER DEFAULT 1`);
+      addColumnIfMissing("users", `client_event_telegram INTEGER DEFAULT 1`);
+      addColumnIfMissing("users", `client_event_push INTEGER DEFAULT 1`);
+    },
+  },
+  {
+    id: "008_users_chat_write",
+    run: () => addColumnIfMissing("users", `chat_write INTEGER DEFAULT NULL`),
+  },
+  {
+    id: "009_users_registered_via",
+    run: () => addColumnIfMissing("users", `registered_via TEXT DEFAULT NULL`),
+  },
+  {
+    id: "010_users_plugin_scope",
+    run: () => {
+      addColumnIfMissing(
+        "users",
+        `plugin_scope TEXT NOT NULL DEFAULT 'none' CHECK(plugin_scope IN ('none', 'allowlist', 'all'))`,
+      );
+      db.exec(`UPDATE users SET plugin_scope='all' WHERE role='admin'`);
+    },
+  },
+  {
+    id: "011_permission_groups",
+    run: () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS permission_groups (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT UNIQUE NOT NULL,
+          description TEXT,
+          created_at INTEGER NOT NULL,
+          created_by INTEGER,
+          FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+        )
+      `);
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS permission_group_permissions (
+          group_id INTEGER NOT NULL,
+          permission TEXT NOT NULL,
+          PRIMARY KEY (group_id, permission),
+          FOREIGN KEY (group_id) REFERENCES permission_groups(id) ON DELETE CASCADE
+        )
+      `);
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS user_permission_groups (
+          user_id INTEGER NOT NULL,
+          group_id INTEGER NOT NULL,
+          PRIMARY KEY (user_id, group_id),
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+          FOREIGN KEY (group_id) REFERENCES permission_groups(id) ON DELETE CASCADE
+        )
+      `);
+      db.exec(
+        `CREATE INDEX IF NOT EXISTS idx_user_permission_groups_user ON user_permission_groups(user_id)`,
+      );
+      db.exec(
+        `CREATE INDEX IF NOT EXISTS idx_permission_group_permissions_group ON permission_group_permissions(group_id)`,
+      );
+    },
+  },
+  {
+    id: "012_user_extra_permissions",
+    run: () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS user_extra_permissions (
+          user_id INTEGER NOT NULL,
+          permission TEXT NOT NULL,
+          PRIMARY KEY (user_id, permission),
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+      `);
+      db.exec(
+        `CREATE INDEX IF NOT EXISTS idx_user_extra_permissions_user ON user_extra_permissions(user_id)`,
+      );
+    },
+  },
 ];
-for (const col of notificationColumns) {
-  try {
-    db.exec(col.sql);
-    logger.info(`[users] Added ${col.label} column to existing database`);
-  } catch (err: any) {
-    if (!err.message?.includes("duplicate column name")) {
-      logger.error("[users] Migration error:", err);
+
+function runMigrations(migrations: ReadonlyArray<Migration>): void {
+  db.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
+    id TEXT PRIMARY KEY,
+    applied_at INTEGER NOT NULL
+  )`);
+
+  const appliedRows = db
+    .prepare("SELECT id FROM schema_migrations")
+    .all() as Array<{ id: string }>;
+  const applied = new Set(appliedRows.map((r) => r.id));
+  const markApplied = db.prepare(
+    "INSERT OR IGNORE INTO schema_migrations (id, applied_at) VALUES (?, ?)",
+  );
+
+  for (const migration of migrations) {
+    if (applied.has(migration.id)) continue;
+    try {
+      migration.run();
+      markApplied.run(migration.id, Date.now());
+      logger.info(`[migration] Applied ${migration.id}`);
+    } catch (err) {
+      logger.error(`[migration] Failed: ${migration.id}`, err);
+      throw err;
     }
   }
 }
 
-try {
-  db.exec(
-    `ALTER TABLE users ADD COLUMN can_upload_files INTEGER NOT NULL DEFAULT 0`,
-  );
-  logger.info("[users] Added can_upload_files column to existing database");
-
-  try {
-    db.exec(`UPDATE users SET can_upload_files=1 WHERE role='admin'`);
-  } catch (err: any) {
-    logger.error("[users] Failed to backfill admin can_upload_files:", err);
-  }
-} catch (err: any) {
-  if (!err.message?.includes("duplicate column name")) {
-    logger.error("[users] Migration error:", err);
-  }
-}
-
-const clientEventColumns: Array<{ sql: string; label: string }> = [
-  { sql: `ALTER TABLE users ADD COLUMN client_event_webhook INTEGER DEFAULT 1`, label: "client_event_webhook" },
-  { sql: `ALTER TABLE users ADD COLUMN client_event_telegram INTEGER DEFAULT 1`, label: "client_event_telegram" },
-  { sql: `ALTER TABLE users ADD COLUMN client_event_push INTEGER DEFAULT 1`, label: "client_event_push" },
-];
-for (const col of clientEventColumns) {
-  try {
-    db.exec(col.sql);
-    logger.info(`[users] Added ${col.label} column to existing database`);
-  } catch (err: any) {
-    if (!err.message?.includes("duplicate column name")) {
-      logger.error("[users] Migration error:", err);
-    }
-  }
-}
-
-try {
-  db.exec(`ALTER TABLE users ADD COLUMN chat_write INTEGER DEFAULT NULL`);
-  logger.info("[users] Added chat_write column to existing database");
-} catch (err: any) {
-  if (!err.message?.includes("duplicate column name")) {
-    logger.error("[users] Migration error:", err);
-  }
-}
-
-try {
-  db.exec(`ALTER TABLE users ADD COLUMN registered_via TEXT DEFAULT NULL`);
-  logger.info("[users] Added registered_via column to existing database");
-} catch (err: any) {
-  if (!err.message?.includes("duplicate column name")) {
-    logger.error("[users] Migration error:", err);
-  }
-}
-
-try {
-  db.exec(
-    `ALTER TABLE users ADD COLUMN plugin_scope TEXT NOT NULL DEFAULT 'none' CHECK(plugin_scope IN ('none', 'allowlist', 'all'))`,
-  );
-  logger.info("[users] Added plugin_scope column to existing database");
-  try {
-    db.exec(`UPDATE users SET plugin_scope='all' WHERE role='admin'`);
-  } catch (err: any) {
-    logger.error("[users] Failed to backfill admin plugin_scope:", err);
-  }
-} catch (err: any) {
-  if (!err.message?.includes("duplicate column name")) {
-    logger.error("[users] Migration error:", err);
-  }
-}
+runMigrations(userMigrations);
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS registration_keys (
@@ -477,26 +509,17 @@ export function removeUserClientAccessRule(
   }
 }
 
-export function canUserAccessClient(
-  userId: number,
-  role: UserRole,
-  clientId: string,
-): boolean {
-  if (role === "admin") return true;
-
-  const access = getUserAccessCacheEntry(userId);
-  const scope = access.scope;
-  if (scope === "none") return false;
-  if (scope === "all") return true;
-
-  if (scope === "allowlist") {
-    return access.allow.has(clientId);
-  }
-  if (scope === "denylist") {
-    return !access.deny.has(clientId);
-  }
-  return false;
-}
+export const canUserAccessClient = withAdminBypass(
+  (userId, _role, clientId: string): boolean => {
+    const access = getUserAccessCacheEntry(userId);
+    const scope = access.scope;
+    if (scope === "none") return false;
+    if (scope === "all") return true;
+    if (scope === "allowlist") return access.allow.has(clientId);
+    if (scope === "denylist") return !access.deny.has(clientId);
+    return false;
+  },
+);
 
 type PluginAccessCacheEntry = {
   scope: PluginAccessScope;
@@ -549,19 +572,15 @@ export function listUserPluginAccessRules(userId: number): UserPluginAccessRule[
     .all(userId) as UserPluginAccessRule[];
 }
 
-export function canUserAccessPlugin(
-  userId: number,
-  role: UserRole,
-  pluginId: string,
-): boolean {
-  if (role === "admin") return true;
-
-  const access = getPluginAccessCacheEntry(userId);
-  if (access.scope === "none") return false;
-  if (access.scope === "all") return true;
-  if (access.scope === "allowlist") return access.allowed.has(pluginId);
-  return false;
-}
+export const canUserAccessPlugin = withAdminBypass(
+  (userId, _role, pluginId: string): boolean => {
+    const access = getPluginAccessCacheEntry(userId);
+    if (access.scope === "none") return false;
+    if (access.scope === "all") return true;
+    if (access.scope === "allowlist") return access.allowed.has(pluginId);
+    return false;
+  },
+);
 
 export function setUserPluginAccessScope(
   userId: number,
@@ -652,7 +671,11 @@ export type FeatureName =
   | "file_browser"
   | "processes"
   | "keylogger"
-  | "voice";
+  | "voice"
+  | "disconnect"
+  | "reconnect"
+  | "uninstall"
+  | "client_metadata";
 
 export const ALL_FEATURES: FeatureName[] = [
   "console",
@@ -663,6 +686,10 @@ export const ALL_FEATURES: FeatureName[] = [
   "processes",
   "keylogger",
   "voice",
+  "disconnect",
+  "reconnect",
+  "uninstall",
+  "client_metadata",
 ];
 
 const featurePermCache = new Map<number, Map<string, boolean>>();
@@ -687,19 +714,14 @@ function invalidateFeaturePermCache(userId: number): void {
   featurePermCache.delete(userId);
 }
 
-export function canUserAccessFeature(
-  userId: number,
-  role: UserRole,
-  feature: FeatureName,
-): boolean {
-  if (role === "admin") return true;
-  if (role === "viewer") return false;
-
-  const perms = getFeaturePermCacheEntry(userId);
-  const entry = perms.get(feature);
-  if (entry === undefined) return true;
-  return entry;
-}
+export const canUserAccessFeature = withAdminBypass(
+  (userId, role, feature: FeatureName): boolean => {
+    if (role === "viewer") return false;
+    const perms = getFeaturePermCacheEntry(userId);
+    const entry = perms.get(feature);
+    return entry === undefined ? true : entry;
+  },
+);
 
 export function getUserFeaturePermissions(
   userId: number,
@@ -915,10 +937,21 @@ export function deleteUser(userId: number): {
   }
 
   try {
-    db.prepare("DELETE FROM users WHERE id = ?").run(userId);
+    // SQLite foreign keys aren't enforced by default, so manually purge the
+    // user's dependent rows so the caches and the DB agree.
+    db.transaction(() => {
+      db.prepare("DELETE FROM user_permission_groups WHERE user_id = ?").run(userId);
+      db.prepare("DELETE FROM user_extra_permissions WHERE user_id = ?").run(userId);
+      db.prepare("DELETE FROM user_client_access_rules WHERE user_id = ?").run(userId);
+      db.prepare("DELETE FROM user_plugin_access_rules WHERE user_id = ?").run(userId);
+      db.prepare("DELETE FROM user_feature_permissions WHERE user_id = ?").run(userId);
+      db.prepare("DELETE FROM users WHERE id = ?").run(userId);
+    })();
     invalidateUserAccessCache(userId);
     invalidatePluginAccessCache(userId);
     invalidateNotificationDeliveryCache();
+    userGroupIdsCache.delete(userId);
+    userExtraPermsCache.delete(userId);
     return { success: true };
   } catch (err: any) {
     console.error("[users] Delete user error:", err);
@@ -965,48 +998,10 @@ export async function verifyPassword(
   return user;
 }
 
-export function canManageUsers(role: UserRole): boolean {
-  return role === "admin";
-}
-
-export function canControlClients(role: UserRole): boolean {
-  return role === "admin" || role === "operator";
-}
-
-export function canBuildClients(userId: number, role: UserRole): boolean {
-  if (role === "admin") return true;
+export const canBuildClients = withAdminBypass((userId): boolean => {
   const user = getUserById(userId);
   return user ? user.can_build === 1 : false;
-}
-
-export function canViewAuditLogs(role: UserRole): boolean {
-  return role === "admin" || role === "operator";
-}
-
-export function canManageEnrollment(role: UserRole): boolean {
-  return role === "admin" || role === "operator";
-}
-
-export function hasPermission(role: UserRole, permission: string, userId?: number): boolean {
-  switch (permission) {
-    case "users:manage":
-      return canManageUsers(role);
-    case "clients:control":
-      return canControlClients(role);
-    case "clients:build":
-      if (userId !== undefined) return canBuildClients(userId, role);
-      return role === "admin" || role === "operator";
-    case "clients:enroll":
-      return canManageEnrollment(role);
-    case "audit:view":
-      return canViewAuditLogs(role);
-    case "chat:write":
-      if (userId !== undefined) return canChatWrite(userId, role);
-      return role === "admin" || role === "operator";
-    default:
-      return false;
-  }
-}
+});
 
 export function setUserCanBuild(
   userId: number,
@@ -1021,11 +1016,10 @@ export function setUserCanBuild(
   }
 }
 
-export function canUploadFiles(userId: number, role: UserRole): boolean {
-  if (role === "admin") return true;
+export const canUploadFiles = withAdminBypass((userId): boolean => {
   const user = getUserById(userId);
   return user ? user.can_upload_files === 1 : false;
-}
+});
 
 export function setUserCanUploadFiles(
   userId: number,
@@ -1040,8 +1034,7 @@ export function setUserCanUploadFiles(
   }
 }
 
-export function canChatWrite(userId: number, role: UserRole): boolean {
-  if (role === "admin") return true;
+export const canChatWrite = withAdminBypass((userId, role): boolean => {
   const user = getUserById(userId);
   if (!user) return false;
   const chatWrite = (user as any).chat_write;
@@ -1049,7 +1042,7 @@ export function canChatWrite(userId: number, role: UserRole): boolean {
     return role === "operator";
   }
   return chatWrite === 1;
-}
+});
 
 export function setUserChatWrite(
   userId: number,
@@ -1062,6 +1055,252 @@ export function setUserChatWrite(
     logger.error("[users] setUserChatWrite error:", err);
     return { success: false, error: err.message || "Failed to update chat write permission" };
   }
+}
+
+export interface PermissionGroup {
+  id: number;
+  name: string;
+  description: string | null;
+  created_at: number;
+  created_by: number | null;
+  permissions: string[];
+}
+
+const groupPermsCache = new Map<number, Set<string>>();
+const userGroupIdsCache = new Map<number, number[]>();
+const userExtraPermsCache = new Map<number, Set<string>>();
+
+function invalidateUserPermissionCaches(userId?: number): void {
+  if (userId === undefined) {
+    userGroupIdsCache.clear();
+    userExtraPermsCache.clear();
+    return;
+  }
+  userGroupIdsCache.delete(userId);
+  userExtraPermsCache.delete(userId);
+}
+
+function invalidateGroupPermsCache(groupId?: number): void {
+  if (groupId === undefined) {
+    groupPermsCache.clear();
+    return;
+  }
+  groupPermsCache.delete(groupId);
+}
+
+export function listPermissionGroups(): PermissionGroup[] {
+  const rows = db
+    .prepare(
+      `SELECT id, name, description, created_at, created_by FROM permission_groups ORDER BY name ASC`,
+    )
+    .all() as Array<Omit<PermissionGroup, "permissions">>;
+  return rows.map((row) => ({
+    ...row,
+    permissions: Array.from(getPermissionsForGroup(row.id)).sort(),
+  }));
+}
+
+export function getPermissionGroup(groupId: number): PermissionGroup | null {
+  const row = db
+    .prepare(
+      `SELECT id, name, description, created_at, created_by FROM permission_groups WHERE id = ?`,
+    )
+    .get(groupId) as Omit<PermissionGroup, "permissions"> | undefined;
+  if (!row) return null;
+  return {
+    ...row,
+    permissions: Array.from(getPermissionsForGroup(row.id)).sort(),
+  };
+}
+
+function getPermissionsForGroup(groupId: number): Set<string> {
+  const cached = groupPermsCache.get(groupId);
+  if (cached) return cached;
+  const rows = db
+    .prepare("SELECT permission FROM permission_group_permissions WHERE group_id = ?")
+    .all(groupId) as Array<{ permission: string }>;
+  const set = new Set(rows.map((r) => r.permission));
+  groupPermsCache.set(groupId, set);
+  return set;
+}
+
+export function createPermissionGroup(
+  name: string,
+  description: string | null,
+  permissions: string[],
+  createdBy: number | null,
+): { success: boolean; error?: string; group?: PermissionGroup } {
+  const trimmedName = (name || "").trim();
+  if (!trimmedName || trimmedName.length > 64) {
+    return { success: false, error: "Name must be 1-64 characters" };
+  }
+  const trimmedDesc = description ? String(description).slice(0, 256).trim() || null : null;
+  const perms = Array.from(new Set(permissions.filter((p) => typeof p === "string" && p.length > 0)));
+
+  try {
+    const tx = db.transaction(() => {
+      const result = db
+        .prepare(
+          "INSERT INTO permission_groups (name, description, created_at, created_by) VALUES (?, ?, ?, ?)",
+        )
+        .run(trimmedName, trimmedDesc, Date.now(), createdBy);
+      const groupId = result.lastInsertRowid as number;
+      const insertPerm = db.prepare(
+        "INSERT INTO permission_group_permissions (group_id, permission) VALUES (?, ?)",
+      );
+      for (const perm of perms) insertPerm.run(groupId, perm);
+      return groupId;
+    });
+    const groupId = tx();
+    invalidateGroupPermsCache(groupId);
+    invalidateUserPermissionCaches();
+    const group = getPermissionGroup(groupId);
+    return group ? { success: true, group } : { success: false, error: "Failed to load created group" };
+  } catch (err: any) {
+    if (err.message?.includes("UNIQUE constraint")) {
+      return { success: false, error: "A group with that name already exists" };
+    }
+    logger.error("[users] createPermissionGroup error:", err);
+    return { success: false, error: err.message || "Failed to create permission group" };
+  }
+}
+
+export function updatePermissionGroup(
+  groupId: number,
+  updates: { name?: string; description?: string | null; permissions?: string[] },
+): { success: boolean; error?: string; group?: PermissionGroup } {
+  const existing = getPermissionGroup(groupId);
+  if (!existing) return { success: false, error: "Group not found" };
+
+  try {
+    const tx = db.transaction(() => {
+      if (updates.name !== undefined) {
+        const trimmed = String(updates.name).trim();
+        if (!trimmed || trimmed.length > 64) throw new Error("Name must be 1-64 characters");
+        db.prepare("UPDATE permission_groups SET name = ? WHERE id = ?").run(trimmed, groupId);
+      }
+      if (updates.description !== undefined) {
+        const trimmed = updates.description ? String(updates.description).slice(0, 256).trim() || null : null;
+        db.prepare("UPDATE permission_groups SET description = ? WHERE id = ?").run(trimmed, groupId);
+      }
+      if (updates.permissions !== undefined) {
+        db.prepare("DELETE FROM permission_group_permissions WHERE group_id = ?").run(groupId);
+        const insertPerm = db.prepare(
+          "INSERT INTO permission_group_permissions (group_id, permission) VALUES (?, ?)",
+        );
+        const perms = Array.from(new Set(updates.permissions.filter((p) => typeof p === "string" && p.length > 0)));
+        for (const perm of perms) insertPerm.run(groupId, perm);
+      }
+    });
+    tx();
+    invalidateGroupPermsCache(groupId);
+    invalidateUserPermissionCaches();
+    const group = getPermissionGroup(groupId);
+    return group ? { success: true, group } : { success: false, error: "Failed to load updated group" };
+  } catch (err: any) {
+    if (err.message?.includes("UNIQUE constraint")) {
+      return { success: false, error: "A group with that name already exists" };
+    }
+    logger.error("[users] updatePermissionGroup error:", err);
+    return { success: false, error: err.message || "Failed to update permission group" };
+  }
+}
+
+export function deletePermissionGroup(groupId: number): { success: boolean; error?: string } {
+  try {
+    // SQLite foreign keys aren't enforced unless PRAGMA foreign_keys=ON, so
+    // clean up dependent rows explicitly to avoid orphans.
+    const result = db.transaction(() => {
+      db.prepare("DELETE FROM permission_group_permissions WHERE group_id = ?").run(groupId);
+      db.prepare("DELETE FROM user_permission_groups WHERE group_id = ?").run(groupId);
+      return db.prepare("DELETE FROM permission_groups WHERE id = ?").run(groupId);
+    })();
+    invalidateGroupPermsCache(groupId);
+    invalidateUserPermissionCaches();
+    if (result.changes === 0) return { success: false, error: "Group not found" };
+    return { success: true };
+  } catch (err: any) {
+    logger.error("[users] deletePermissionGroup error:", err);
+    return { success: false, error: err.message || "Failed to delete permission group" };
+  }
+}
+
+export function getUserGroupIds(userId: number): number[] {
+  const cached = userGroupIdsCache.get(userId);
+  if (cached) return cached;
+  const rows = db
+    .prepare("SELECT group_id FROM user_permission_groups WHERE user_id = ?")
+    .all(userId) as Array<{ group_id: number }>;
+  const ids = rows.map((r) => r.group_id);
+  userGroupIdsCache.set(userId, ids);
+  return ids;
+}
+
+export function setUserGroups(
+  userId: number,
+  groupIds: number[],
+): { success: boolean; error?: string } {
+  try {
+    const tx = db.transaction(() => {
+      db.prepare("DELETE FROM user_permission_groups WHERE user_id = ?").run(userId);
+      const insert = db.prepare(
+        "INSERT OR IGNORE INTO user_permission_groups (user_id, group_id) VALUES (?, ?)",
+      );
+      const unique = Array.from(new Set(groupIds.filter((id) => Number.isFinite(id))));
+      for (const gid of unique) insert.run(userId, gid);
+    });
+    tx();
+    invalidateUserPermissionCaches(userId);
+    return { success: true };
+  } catch (err: any) {
+    logger.error("[users] setUserGroups error:", err);
+    return { success: false, error: err.message || "Failed to update user groups" };
+  }
+}
+
+export function getUserExtraPermissions(userId: number): Set<string> {
+  const cached = userExtraPermsCache.get(userId);
+  if (cached) return cached;
+  const rows = db
+    .prepare("SELECT permission FROM user_extra_permissions WHERE user_id = ?")
+    .all(userId) as Array<{ permission: string }>;
+  const set = new Set(rows.map((r) => r.permission));
+  userExtraPermsCache.set(userId, set);
+  return set;
+}
+
+export function setUserExtraPermissions(
+  userId: number,
+  permissions: string[],
+): { success: boolean; error?: string } {
+  try {
+    const tx = db.transaction(() => {
+      db.prepare("DELETE FROM user_extra_permissions WHERE user_id = ?").run(userId);
+      const insert = db.prepare(
+        "INSERT OR IGNORE INTO user_extra_permissions (user_id, permission) VALUES (?, ?)",
+      );
+      const unique = Array.from(new Set(permissions.filter((p) => typeof p === "string" && p.length > 0)));
+      for (const perm of unique) insert.run(userId, perm);
+    });
+    tx();
+    invalidateUserPermissionCaches(userId);
+    return { success: true };
+  } catch (err: any) {
+    logger.error("[users] setUserExtraPermissions error:", err);
+    return { success: false, error: err.message || "Failed to update extra permissions" };
+  }
+}
+
+// Collects every permission string a user has via assigned groups + direct
+// extras. Returns a Set for cheap membership tests; getUserPermissions in
+// rbac.ts unions this with role-level permissions.
+export function getUserGrantedPermissions(userId: number): Set<string> {
+  const result = new Set<string>();
+  for (const groupId of getUserGroupIds(userId)) {
+    for (const perm of getPermissionsForGroup(groupId)) result.add(perm);
+  }
+  for (const perm of getUserExtraPermissions(userId)) result.add(perm);
+  return result;
 }
 
 export function setUserTelegramChatId(
@@ -1432,6 +1671,7 @@ export async function approvePendingRegistration(
       `UPDATE pending_registrations SET status = 'approved', reviewed_by = ?, reviewed_at = ? WHERE id = ?`,
     ).run(reviewedBy, Date.now(), pendingId);
 
+    applyRegistrationDefaultGroups(result.lastInsertRowid as number);
     invalidateNotificationDeliveryCache();
     return { success: true, userId: result.lastInsertRowid as number };
   } catch (err: any) {
@@ -1489,6 +1729,7 @@ export async function registerUser(
       "allowlist", role === "operator" ? 1 : 0, 0, registeredVia,
     );
 
+    applyRegistrationDefaultGroups(result.lastInsertRowid as number);
     invalidateNotificationDeliveryCache();
     return { success: true, userId: result.lastInsertRowid as number };
   } catch (err: any) {
@@ -1498,6 +1739,23 @@ export async function registerUser(
     logger.error("[users] registerUser error:", err);
     return { success: false, error: err.message || "Failed to register user" };
   }
+}
+
+function applyRegistrationDefaultGroups(userId: number): void {
+  let defaults: number[] = [];
+  try {
+    defaults = getConfig().registration.defaultGroupIds || [];
+  } catch {
+    return;
+  }
+  if (defaults.length === 0) return;
+  const validIds: number[] = [];
+  const check = db.prepare("SELECT 1 AS ok FROM permission_groups WHERE id = ?");
+  for (const id of defaults) {
+    if ((check.get(id) as { ok?: number } | undefined)?.ok) validIds.push(id);
+  }
+  if (validIds.length === 0) return;
+  setUserGroups(userId, validIds);
 }
 
 export function getTotalUserCount(): number {

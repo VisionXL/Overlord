@@ -9,6 +9,7 @@ import {
   getUserNotificationSettings,
   updateUserNotificationSettings,
 } from "../../users";
+import { requirePermission } from "../../rbac";
 import {
   DEFAULT_WEBHOOK_TEMPLATE,
   DEFAULT_TELEGRAM_TEMPLATE,
@@ -76,8 +77,11 @@ export async function handleNotificationsConfigRoutes(
         headers: { "Content-Type": "application/json" },
       });
     }
-    if (user.role !== "admin") {
-      return new Response("Forbidden: Admin access required", { status: 403 });
+    try {
+      requirePermission(user, "system:configure");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
     return Response.json({ notifications: getConfig().notifications });
   }
@@ -90,10 +94,11 @@ export async function handleNotificationsConfigRoutes(
         headers: { "Content-Type": "application/json" },
       });
     }
-    if (user.role !== "admin") {
-      return new Response("Forbidden: Admin access required", {
-        status: 403,
-      });
+    try {
+      requirePermission(user, "system:configure");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
 
     let body: any = {};

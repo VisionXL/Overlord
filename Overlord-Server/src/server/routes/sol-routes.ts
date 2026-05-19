@@ -2,6 +2,7 @@ import { createHash, randomBytes, createCipheriv } from "crypto";
 import { authenticateRequest } from "../../auth";
 import { getConfig } from "../../config";
 import { logger } from "../../logger";
+import { requirePermission } from "../../rbac";
 
 let _solana: typeof import("@solana/web3.js") | null = null;
 async function getSolana() {
@@ -71,8 +72,11 @@ export async function handleSolRoutes(
       return new Response("Unauthorized", { status: 401 });
     }
 
-    if (user.role !== "admin") {
-      return new Response("Forbidden: Admin access required", { status: 403 });
+    try {
+      requirePermission(user, "system:configure");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
 
     if (req.method === "POST" && url.pathname === "/api/sol/preview") {

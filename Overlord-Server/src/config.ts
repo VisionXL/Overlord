@@ -72,6 +72,7 @@ export interface Config {
     mode: "off" | "open" | "key" | "approval";
     defaultRole: "operator" | "viewer";
     maxUsersTotal: number;
+    defaultGroupIds: number[];
   };
   buildRateLimit: {
     maxBuildsPerHour: number;
@@ -155,6 +156,7 @@ const DEFAULT_CONFIG: Config = {
     mode: "off" as const,
     defaultRole: "operator" as const,
     maxUsersTotal: 0,
+    defaultGroupIds: [] as number[],
   },
   buildRateLimit: {
     maxBuildsPerHour: 5,
@@ -546,6 +548,11 @@ export function loadConfig(): Config {
         Number(process.env.OVERLORD_REGISTRATION_MAX_USERS) ||
         fileConfig.registration?.maxUsersTotal ||
         DEFAULT_CONFIG.registration.maxUsersTotal,
+      defaultGroupIds: Array.isArray(fileConfig.registration?.defaultGroupIds)
+        ? fileConfig.registration.defaultGroupIds
+            .map((g: unknown) => Number(g))
+            .filter((g: number) => Number.isFinite(g) && g > 0)
+        : [...DEFAULT_CONFIG.registration.defaultGroupIds],
     },
     buildRateLimit: {
       maxBuildsPerHour:
@@ -834,6 +841,9 @@ export async function updateRegistrationConfig(
     next.defaultRole = current.registration.defaultRole;
   }
   next.maxUsersTotal = Math.max(0, Math.min(100000, Number(next.maxUsersTotal) || 0));
+  next.defaultGroupIds = Array.isArray(next.defaultGroupIds)
+    ? Array.from(new Set(next.defaultGroupIds.map((g) => Number(g)).filter((g) => Number.isFinite(g) && g > 0)))
+    : [...current.registration.defaultGroupIds];
 
   configCache = {
     ...current,

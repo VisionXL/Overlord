@@ -84,20 +84,20 @@
             <a data-target="telegram-settings"        class="settings-nav-link" style="--accent: 52 211 153"><i class="fa-solid fa-bell w-4 text-emerald-400"></i><span>Notification Delivery</span></a>
             <a data-target="section-news"             class="settings-nav-link" style="--accent: 56 189 248"><i class="fa-brands fa-telegram w-4 text-sky-400"></i><span>News &amp; Updates</span></a>
 
-            <span class="settings-nav-group-label" data-admin-or-operator>Operations</span>
-            <a data-target="section-bans"             class="settings-nav-link" style="--accent: 248 113 113"><i class="fa-solid fa-ban w-4 text-red-400"></i><span>Banned IPs</span></a>
-            <a data-target="section-builds"           class="settings-nav-link" data-admin-or-operator style="--accent: 251 146 60"><i class="fa-solid fa-hammer w-4 text-orange-400"></i><span>Build IDs</span></a>
-            <a data-target="wipe-offline-section"     class="settings-nav-link" data-admin-or-operator style="--accent: 248 113 113"><i class="fa-solid fa-circle-minus w-4 text-red-400"></i><span>Wipe Offline Clients</span></a>
+            <span class="settings-nav-group-label">Operations</span>
+            <a data-target="section-bans"             class="settings-nav-link" data-permission="network:manage-bans" style="--accent: 248 113 113"><i class="fa-solid fa-ban w-4 text-red-400"></i><span>Banned IPs</span></a>
+            <a data-target="section-builds"           class="settings-nav-link" data-permission="clients:build" style="--accent: 251 146 60"><i class="fa-solid fa-hammer w-4 text-orange-400"></i><span>Build IDs</span></a>
+            <a data-target="wipe-offline-section"     class="settings-nav-link" data-permission="clients:control" style="--accent: 248 113 113"><i class="fa-solid fa-circle-minus w-4 text-red-400"></i><span>Wipe Offline Clients</span></a>
 
-            <span class="settings-nav-group-label" data-admin-only>Admin</span>
-            <a data-target="section-security"         class="settings-nav-link" data-admin-only style="--accent: 129 140 248"><i class="fa-solid fa-shield-halved w-4 text-indigo-400"></i><span>Security Policy</span></a>
-            <a data-target="thumbnails-section"       class="settings-nav-link" data-admin-only style="--accent: 56 189 248"><i class="fa-solid fa-images w-4 text-sky-400"></i><span>Screenshot Thumbnails</span></a>
-            <a data-target="section-tls"              class="settings-nav-link" data-admin-only style="--accent: 34 211 238"><i class="fa-solid fa-certificate w-4 text-cyan-400"></i><span>TLS Certificates</span></a>
-            <a data-target="chat-settings-section"    class="settings-nav-link" data-admin-only style="--accent: 56 189 248"><i class="fa-solid fa-comments w-4 text-sky-400"></i><span>Team Chat</span></a>
-            <a data-target="registration-section"     class="settings-nav-link" data-admin-only style="--accent: 52 211 153"><i class="fa-solid fa-user-plus w-4 text-emerald-400"></i><span>Registration</span></a>
-            <a data-target="build-rate-limit-section" class="settings-nav-link" data-admin-only style="--accent: 251 146 60"><i class="fa-solid fa-gauge-high w-4 text-orange-400"></i><span>Build Rate Limit</span></a>
-            <a data-target="section-appearance"       class="settings-nav-link" data-admin-only style="--accent: 232 121 249"><i class="fa-solid fa-paintbrush w-4 text-fuchsia-400"></i><span>Custom CSS</span></a>
-            <a data-target="export-import-section"    class="settings-nav-link" data-admin-only style="--accent: 251 191 36"><i class="fa-solid fa-file-export w-4 text-amber-400"></i><span>Export / Import</span></a>
+            <span class="settings-nav-group-label">Admin</span>
+            <a data-target="section-security"         class="settings-nav-link" data-permission="system:configure" style="--accent: 129 140 248"><i class="fa-solid fa-shield-halved w-4 text-indigo-400"></i><span>Security Policy</span></a>
+            <a data-target="thumbnails-section"       class="settings-nav-link" data-permission="system:configure" style="--accent: 56 189 248"><i class="fa-solid fa-images w-4 text-sky-400"></i><span>Screenshot Thumbnails</span></a>
+            <a data-target="section-tls"              class="settings-nav-link" data-permission="system:configure" style="--accent: 34 211 238"><i class="fa-solid fa-certificate w-4 text-cyan-400"></i><span>TLS Certificates</span></a>
+            <a data-target="chat-settings-section"    class="settings-nav-link" data-permission="system:configure" style="--accent: 56 189 248"><i class="fa-solid fa-comments w-4 text-sky-400"></i><span>Team Chat</span></a>
+            <a data-target="registration-section"     class="settings-nav-link" data-permission="system:configure" style="--accent: 52 211 153"><i class="fa-solid fa-user-plus w-4 text-emerald-400"></i><span>Registration</span></a>
+            <a data-target="build-rate-limit-section" class="settings-nav-link" data-permission="system:configure" style="--accent: 251 146 60"><i class="fa-solid fa-gauge-high w-4 text-orange-400"></i><span>Build Rate Limit</span></a>
+            <a data-target="section-appearance"       class="settings-nav-link" data-permission="system:configure" style="--accent: 232 121 249"><i class="fa-solid fa-paintbrush w-4 text-fuchsia-400"></i><span>Custom CSS</span></a>
+            <a data-target="export-import-section"    class="settings-nav-link" data-permission="system:configure" style="--accent: 251 191 36"><i class="fa-solid fa-file-export w-4 text-amber-400"></i><span>Export / Import</span></a>
           </nav>
         </aside>
 
@@ -353,7 +353,7 @@
       <!-- ========== OPERATIONS ========== -->
 
       <!-- Banned IPs -->
-      <section id="section-bans" class="bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4 settings-section">
+      <section id="section-bans" data-permission="network:manage-bans" class="hidden bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4 settings-section">
         <div class="flex items-center justify-between gap-3">
           <div class="flex items-center gap-3">
             <div class="flex items-center justify-center w-9 h-9 rounded-lg bg-red-500/10 border border-red-500/30">
@@ -397,7 +397,7 @@
       </section>
 
       <!-- Build IDs (operator/admin) -->
-      <section id="section-builds" class="hidden bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4 settings-section">
+      <section id="section-builds" data-permission="clients:build" class="hidden bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4 settings-section">
         <div class="flex items-center justify-between gap-3">
           <div class="flex items-center gap-3">
             <div class="flex items-center justify-center w-9 h-9 rounded-lg bg-orange-500/10 border border-orange-500/30">
@@ -451,7 +451,7 @@
       </section>
 
       <!-- Wipe Offline Clients -->
-      <section id="wipe-offline-section" class="hidden bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4 settings-section">
+      <section id="wipe-offline-section" data-permission="clients:control" class="hidden bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4 settings-section">
         <div class="flex items-center gap-3">
           <div class="flex items-center justify-center w-9 h-9 rounded-lg bg-red-500/10 border border-red-500/30">
             <i class="fa-solid fa-circle-minus text-red-400"></i>
@@ -482,7 +482,7 @@
       <!-- ========== ADMIN ========== -->
 
       <!-- Security Policy -->
-      <section id="section-security" class="bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4 settings-section">
+      <section id="section-security" data-permission="system:configure" class="hidden bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4 settings-section">
         <div class="flex items-center gap-3">
           <div class="flex items-center justify-center w-9 h-9 rounded-lg bg-indigo-500/10 border border-indigo-500/30">
             <i class="fa-solid fa-shield-halved text-indigo-400"></i>
@@ -584,7 +584,7 @@
       </section>
 
       <!-- TLS Certificates -->
-      <section id="section-tls" class="bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4 settings-section">
+      <section id="section-tls" data-permission="system:configure" class="hidden bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4 settings-section">
         <div class="flex items-center gap-3">
           <div class="flex items-center justify-center w-9 h-9 rounded-lg bg-cyan-500/10 border border-cyan-500/30">
             <i class="fa-solid fa-certificate text-cyan-400"></i>
@@ -686,7 +686,7 @@
       </section>
 
       <!-- Team Chat -->
-      <section id="chat-settings-section" class="hidden bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4 settings-section">
+      <section id="chat-settings-section" data-permission="system:configure" class="hidden bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4 settings-section">
         <div class="flex items-center gap-3">
           <div class="flex items-center justify-center w-9 h-9 rounded-lg bg-sky-500/10 border border-sky-500/30">
             <i class="fa-solid fa-comments text-sky-400"></i>
@@ -722,7 +722,7 @@
       </section>
 
       <!-- Registration Settings (admin only) -->
-      <section id="registration-section" class="hidden bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4 settings-section">
+      <section id="registration-section" data-permission="system:configure" class="hidden bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4 settings-section">
         <div class="flex items-center gap-3">
           <div class="flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
             <i class="fa-solid fa-user-plus text-emerald-400"></i>
@@ -755,6 +755,13 @@
               <span class="text-sm text-slate-300">Max Users (0 = unlimited)</span>
               <input id="reg-max-users" type="number" min="0" max="10000" class="mt-1 w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500" />
             </label>
+          </div>
+          <div>
+            <span class="text-sm text-slate-300">Default permission groups for new users</span>
+            <p class="text-xs text-slate-500 mb-2">Newly registered users automatically join these groups. Manage groups on the <a href="/users" class="text-sky-400 hover:underline">Users page</a>.</p>
+            <div id="reg-default-groups-list" class="space-y-1 max-h-40 overflow-y-auto border border-slate-700 rounded-lg p-2 bg-slate-900/50">
+              <p class="text-slate-500 text-sm">Loading...</p>
+            </div>
           </div>
           <button type="submit" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 transition-colors text-white text-sm font-medium">
             <i class="fa-solid fa-floppy-disk"></i>Save Registration Settings
@@ -823,7 +830,7 @@
       </section>
 
       <!-- Screenshot Thumbnails (admin only) -->
-      <section id="thumbnails-section" class="hidden bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4 settings-section">
+      <section id="thumbnails-section" data-permission="system:configure" class="hidden bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4 settings-section">
         <div class="flex items-center gap-3">
           <div class="flex items-center justify-center w-9 h-9 rounded-lg bg-sky-500/10 border border-sky-500/30">
             <i class="fa-solid fa-images text-sky-400"></i>
@@ -863,7 +870,7 @@
       </section>
 
       <!-- Build Rate Limit (admin only) -->
-      <section id="build-rate-limit-section" class="hidden bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4 settings-section">
+      <section id="build-rate-limit-section" data-permission="system:configure" class="hidden bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4 settings-section">
         <div class="flex items-center gap-3">
           <div class="flex items-center justify-center w-9 h-9 rounded-lg bg-orange-500/10 border border-orange-500/30">
             <i class="fa-solid fa-gauge-high text-orange-400"></i>
@@ -897,7 +904,7 @@
       </section>
 
       <!-- Custom CSS -->
-      <section id="section-appearance" class="bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4 settings-section">
+      <section id="section-appearance" data-permission="system:configure" class="hidden bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4 settings-section">
         <div class="flex items-center gap-3">
           <div class="flex items-center justify-center w-9 h-9 rounded-lg bg-fuchsia-500/10 border border-fuchsia-500/30">
             <i class="fa-solid fa-paintbrush text-fuchsia-400"></i>
@@ -935,7 +942,7 @@
       </section>
 
       <!-- Export & Import -->
-      <section id="export-import-section" class="hidden bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4 settings-section">
+      <section id="export-import-section" data-permission="system:configure" class="hidden bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4 settings-section">
         <div class="flex items-center gap-3">
           <div class="flex items-center justify-center w-9 h-9 rounded-lg bg-amber-500/10 border border-amber-500/30">
             <i class="fa-solid fa-file-export text-amber-400"></i>

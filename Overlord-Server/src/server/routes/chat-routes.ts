@@ -1,7 +1,7 @@
 import { authenticateRequest } from "../../auth";
 import { getConfig } from "../../config";
 import { getChatHistory, getOnlineClientCountForUser } from "../../db";
-import { hasPermission } from "../../users";
+import { hasPermission } from "../../rbac";
 
 export async function handleChatRoutes(
   req: Request,

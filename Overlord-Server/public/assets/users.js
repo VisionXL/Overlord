@@ -231,7 +231,18 @@ function renderUsers() {
               <i class="fa-solid fa-puzzle-piece"></i>
             </button>
             ` : ''}
-            <button 
+            ${user.role !== "admin" ? `
+            <button
+              class="user-action-btn px-3 py-1.5 text-sm bg-violet-900/30 hover:bg-violet-900/50 text-violet-300 rounded border border-violet-800 transition-colors"
+              data-action="permissions"
+              data-user-id="${user.id}"
+              data-username="${escapeHtml(user.username)}"
+              title="Permission Groups & Extras"
+            >
+              <i class="fa-solid fa-layer-group"></i>
+            </button>
+            ` : ''}
+            <button
               class="user-action-btn px-3 py-1.5 text-sm bg-cyan-900/30 hover:bg-cyan-900/50 text-cyan-300 rounded border border-cyan-800 transition-colors"
               data-action="view-sessions"
               data-user-id="${user.id}"
@@ -328,6 +339,9 @@ function attachActionListeners() {
         break;
       case "view-sessions":
         viewUserSessions(userId, username);
+        break;
+      case "permissions":
+        openUserPermissionsModal(userId, username);
         break;
     }
   };
@@ -512,6 +526,10 @@ const FEATURE_LABELS = {
   processes: { label: "Processes", icon: "fa-microchip" },
   keylogger: { label: "Keylogger", icon: "fa-keyboard" },
   voice: { label: "Voice", icon: "fa-microphone" },
+  disconnect: { label: "Disconnect Client", icon: "fa-plug-circle-xmark" },
+  reconnect: { label: "Reconnect Client", icon: "fa-arrows-rotate" },
+  uninstall: { label: "Uninstall Agent", icon: "fa-trash-can" },
+  client_metadata: { label: "Edit Client Metadata", icon: "fa-pen-to-square" },
 };
 
 window.configureFeaturePermissions = async function (userId, username) {
@@ -899,5 +917,276 @@ function formatRelTime(epochSeconds) {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
+let allPermissions = [];
+let allGroups = [];
+let editingGroupId = null;
+let editingUserId = null;
+
+async function loadPermissionsAndGroups() {
+  try {
+    const [permsRes, groupsRes] = await Promise.all([
+      fetch("/api/permissions"),
+      fetch("/api/permission-groups"),
+    ]);
+    if (permsRes.ok) {
+      const data = await permsRes.json();
+      allPermissions = Array.isArray(data.permissions) ? data.permissions : [];
+    }
+    if (groupsRes.ok) {
+      const data = await groupsRes.json();
+      allGroups = Array.isArray(data.groups) ? data.groups : [];
+    }
+    renderGroupsList();
+  } catch (err) {
+    console.error("Failed to load permissions/groups:", err);
+  }
+}
+
+function renderGroupsList() {
+  const container = document.getElementById("groups-list");
+  if (!container) return;
+  if (allGroups.length === 0) {
+    container.innerHTML = `<p class="text-slate-500 text-sm text-center py-4">No groups yet. Click "New Group" to create one.</p>`;
+    return;
+  }
+  container.innerHTML = allGroups
+    .map(
+      (g) => `
+    <div class="flex items-start justify-between gap-3 p-3 bg-slate-800/40 border border-slate-700 rounded-lg">
+      <div class="flex-1 min-w-0">
+        <div class="font-medium text-slate-100">${escapeHtml(g.name)}</div>
+        ${g.description ? `<div class="text-xs text-slate-400 mt-0.5">${escapeHtml(g.description)}</div>` : ""}
+        <div class="text-xs text-slate-500 mt-1">
+          ${g.permissions.length} permission${g.permissions.length === 1 ? "" : "s"}:
+          <span class="text-slate-400">${g.permissions.map((p) => escapeHtml(p)).join(", ") || "<em>none</em>"}</span>
+        </div>
+      </div>
+      <div class="flex gap-1 flex-shrink-0">
+        <button class="group-action px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded" data-action="edit" data-group-id="${g.id}"><i class="fa-solid fa-pen"></i></button>
+        <button class="group-action px-2 py-1 text-xs bg-red-900/40 hover:bg-red-900/60 text-red-300 rounded" data-action="delete" data-group-id="${g.id}" data-group-name="${escapeHtml(g.name)}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+    </div>`,
+    )
+    .join("");
+}
+
+document.getElementById("groups-list")?.addEventListener("click", (e) => {
+  const btn = e.target.closest(".group-action");
+  if (!btn) return;
+  const groupId = Number(btn.dataset.groupId);
+  if (btn.dataset.action === "edit") openGroupModal(groupId);
+  else if (btn.dataset.action === "delete") deleteGroup(groupId, btn.dataset.groupName);
+});
+
+document.getElementById("new-group-btn")?.addEventListener("click", (e) => {
+  e.preventDefault();
+  openGroupModal(null);
+});
+
+function openGroupModal(groupId) {
+  editingGroupId = groupId;
+  const modal = document.getElementById("group-modal");
+  const title = document.getElementById("group-modal-title");
+  const nameInput = document.getElementById("group-name");
+  const descInput = document.getElementById("group-description");
+  const permsList = document.getElementById("group-permissions-list");
+  const errorBox = document.getElementById("group-error");
+  errorBox.classList.add("hidden");
+
+  let selected = new Set();
+  if (groupId) {
+    const g = allGroups.find((x) => x.id === groupId);
+    if (g) {
+      title.textContent = `Edit Group: ${g.name}`;
+      nameInput.value = g.name;
+      descInput.value = g.description || "";
+      selected = new Set(g.permissions);
+    }
+  } else {
+    title.textContent = "New Group";
+    nameInput.value = "";
+    descInput.value = "";
+  }
+
+  permsList.innerHTML = allPermissions
+    .map(
+      (p) => `
+    <label class="flex items-start gap-2 py-1 cursor-pointer hover:bg-slate-800/40 rounded px-2">
+      <input type="checkbox" class="mt-1 h-4 w-4 accent-violet-500" data-perm="${escapeHtml(p.id)}" ${selected.has(p.id) ? "checked" : ""} />
+      <div>
+        <div class="text-sm font-mono text-slate-200">${escapeHtml(p.id)}</div>
+        <div class="text-xs text-slate-500">${escapeHtml(p.description)}</div>
+      </div>
+    </label>`,
+    )
+    .join("");
+
+  modal.classList.remove("hidden");
+}
+
+function closeGroupModal() {
+  document.getElementById("group-modal")?.classList.add("hidden");
+  editingGroupId = null;
+}
+document.getElementById("close-group-modal")?.addEventListener("click", closeGroupModal);
+document.getElementById("group-cancel-btn")?.addEventListener("click", closeGroupModal);
+
+document.getElementById("group-form")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const name = document.getElementById("group-name").value.trim();
+  const description = document.getElementById("group-description").value.trim();
+  const permissions = Array.from(
+    document.querySelectorAll("#group-permissions-list input[type=checkbox]:checked"),
+  ).map((el) => el.dataset.perm);
+  const errorBox = document.getElementById("group-error");
+  errorBox.classList.add("hidden");
+
+  try {
+    const url = editingGroupId
+      ? `/api/permission-groups/${editingGroupId}`
+      : "/api/permission-groups";
+    const method = editingGroupId ? "PATCH" : "POST";
+    const res = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, description, permissions }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      errorBox.textContent = data.error || "Failed to save group";
+      errorBox.classList.remove("hidden");
+      return;
+    }
+    closeGroupModal();
+    await loadPermissionsAndGroups();
+  } catch (err) {
+    console.error(err);
+    errorBox.textContent = "Network error";
+    errorBox.classList.remove("hidden");
+  }
+});
+
+async function deleteGroup(groupId, groupName) {
+  if (!confirm(`Delete group "${groupName}"? Users assigned to this group will lose its permissions.`)) return;
+  try {
+    const res = await fetch(`/api/permission-groups/${groupId}`, { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error || "Failed to delete group");
+      return;
+    }
+    await loadPermissionsAndGroups();
+  } catch {
+    alert("Network error");
+  }
+}
+
+async function openUserPermissionsModal(userId, username) {
+  editingUserId = userId;
+  const modal = document.getElementById("user-perms-modal");
+  const title = document.getElementById("user-perms-title");
+  const groupsBox = document.getElementById("user-groups-list");
+  const extrasBox = document.getElementById("user-extras-list");
+  const errorBox = document.getElementById("user-perms-error");
+
+  title.textContent = `Permissions: ${username}`;
+  errorBox.classList.add("hidden");
+  groupsBox.innerHTML = `<p class="text-slate-500 text-sm">Loading...</p>`;
+  extrasBox.innerHTML = `<p class="text-slate-500 text-sm">Loading...</p>`;
+  modal.classList.remove("hidden");
+
+  if (allPermissions.length === 0 || allGroups.length === 0) {
+    await loadPermissionsAndGroups();
+  }
+
+  try {
+    const [groupsRes, extrasRes] = await Promise.all([
+      fetch(`/api/users/${userId}/permission-groups`),
+      fetch(`/api/users/${userId}/extra-permissions`),
+    ]);
+    const groupsData = await groupsRes.json().catch(() => ({}));
+    const extrasData = await extrasRes.json().catch(() => ({}));
+    const assignedGroups = new Set(groupsData.groupIds || []);
+    const assignedExtras = new Set(extrasData.permissions || []);
+
+    groupsBox.innerHTML = allGroups.length === 0
+      ? `<p class="text-slate-500 text-sm">No groups defined yet.</p>`
+      : allGroups
+          .map(
+            (g) => `
+        <label class="flex items-start gap-2 py-1 cursor-pointer hover:bg-slate-800/40 rounded px-2">
+          <input type="checkbox" class="mt-1 h-4 w-4 accent-violet-500" data-group="${g.id}" ${assignedGroups.has(g.id) ? "checked" : ""} />
+          <div>
+            <div class="text-sm font-medium text-slate-200">${escapeHtml(g.name)}</div>
+            <div class="text-xs text-slate-500">${g.permissions.length} permission${g.permissions.length === 1 ? "" : "s"}</div>
+          </div>
+        </label>`,
+          )
+          .join("");
+
+    extrasBox.innerHTML = allPermissions
+      .map(
+        (p) => `
+      <label class="flex items-start gap-2 py-1 cursor-pointer hover:bg-slate-800/40 rounded px-2">
+        <input type="checkbox" class="mt-1 h-4 w-4 accent-violet-500" data-perm="${escapeHtml(p.id)}" ${assignedExtras.has(p.id) ? "checked" : ""} />
+        <div>
+          <div class="text-sm font-mono text-slate-200">${escapeHtml(p.id)}</div>
+          <div class="text-xs text-slate-500">${escapeHtml(p.description)}</div>
+        </div>
+      </label>`,
+      )
+      .join("");
+  } catch (err) {
+    console.error(err);
+    errorBox.textContent = "Failed to load current assignments";
+    errorBox.classList.remove("hidden");
+  }
+}
+
+function closeUserPermsModal() {
+  document.getElementById("user-perms-modal")?.classList.add("hidden");
+  editingUserId = null;
+}
+document.getElementById("close-user-perms-modal")?.addEventListener("click", closeUserPermsModal);
+document.getElementById("user-perms-cancel-btn")?.addEventListener("click", closeUserPermsModal);
+
+document.getElementById("user-perms-save-btn")?.addEventListener("click", async () => {
+  if (!editingUserId) return;
+  const groupIds = Array.from(
+    document.querySelectorAll("#user-groups-list input[type=checkbox]:checked"),
+  ).map((el) => Number(el.dataset.group));
+  const permissions = Array.from(
+    document.querySelectorAll("#user-extras-list input[type=checkbox]:checked"),
+  ).map((el) => el.dataset.perm);
+  const errorBox = document.getElementById("user-perms-error");
+  errorBox.classList.add("hidden");
+
+  try {
+    const [gRes, eRes] = await Promise.all([
+      fetch(`/api/users/${editingUserId}/permission-groups`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ groupIds }),
+      }),
+      fetch(`/api/users/${editingUserId}/extra-permissions`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ permissions }),
+      }),
+    ]);
+    if (!gRes.ok || !eRes.ok) {
+      const data = await (gRes.ok ? eRes : gRes).json().catch(() => ({}));
+      errorBox.textContent = data.error || "Failed to save";
+      errorBox.classList.remove("hidden");
+      return;
+    }
+    closeUserPermsModal();
+  } catch {
+    errorBox.textContent = "Network error";
+    errorBox.classList.remove("hidden");
+  }
+});
+
 getCurrentUser();
 loadUsers();
+loadPermissionsAndGroups();

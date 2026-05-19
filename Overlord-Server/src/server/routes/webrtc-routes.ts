@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { authenticateRequest } from "../../auth";
-import { canUserAccessClient } from "../../users";
+import { requireClientAccess } from "../../rbac";
 import { logger } from "../../logger";
 
 const MEDIAMTX_URL = (process.env.OVERLORD_MEDIAMTX_URL || "http://localhost:8889").replace(/\/+$/, "");
@@ -57,7 +57,10 @@ export async function handleWebrtcRoutes(req: Request, url: URL): Promise<Respon
   } else {
     const user = await authenticateRequest(req);
     if (!user) return new Response("Unauthorized", { status: 401 });
-    if (!canUserAccessClient(user.userId, user.role as any, clientId)) {
+    try {
+      requireClientAccess(user, clientId);
+    } catch (error) {
+      if (error instanceof Response) return error;
       return new Response("Forbidden", { status: 403 });
     }
   }

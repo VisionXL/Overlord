@@ -6,6 +6,7 @@ import { AuditAction, logAudit } from "../../auditLog";
 import * as clientManager from "../../clientManager";
 import { metrics } from "../../metrics";
 import { encodeMessage } from "../../protocol";
+import { requirePermission } from "../../rbac";
 import { createUploadPull } from "./file-download-routes";
 
 type RequestIpProvider = {
@@ -39,8 +40,11 @@ export async function handleWinRERoutes(
     if (!user) {
       return new Response("Unauthorized", { status: 401 });
     }
-    if (user.role !== "admin") {
-      return new Response("Forbidden: Admin access required", { status: 403 });
+    try {
+      requirePermission(user, "clients:winre");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
 
     let form: FormData;
@@ -80,8 +84,11 @@ export async function handleWinRERoutes(
     if (!user) {
       return new Response("Unauthorized", { status: 401 });
     }
-    if (user.role !== "admin") {
-      return new Response("Forbidden: Admin access required", { status: 403 });
+    try {
+      requirePermission(user, "clients:winre");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
 
     let body: any = {};
@@ -169,8 +176,11 @@ export async function handleWinRERoutes(
     if (!user) {
       return new Response("Unauthorized", { status: 401 });
     }
-    if (user.role !== "admin") {
-      return new Response("Forbidden: Admin access required", { status: 403 });
+    try {
+      requirePermission(user, "clients:winre");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
 
     let body: any = {};
@@ -232,8 +242,11 @@ export async function handleWinRERoutes(
     if (!user) {
       return new Response("Unauthorized", { status: 401 });
     }
-    if (user.role !== "admin") {
-      return new Response("Forbidden: Admin access required", { status: 403 });
+    try {
+      requirePermission(user, "clients:winre");
+    } catch (error) {
+      if (error instanceof Response) return error;
+      return new Response("Forbidden", { status: 403 });
     }
 
     let body: any = {};

@@ -23,6 +23,24 @@
     <div class="min-h-full flex flex-col">
       <!-- Main Content -->
       <main class="flex-1 max-w-7xl w-full mx-auto px-4 py-8">
+        <!-- Permission Groups Manager -->
+        <details class="mb-6 bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden">
+          <summary class="cursor-pointer px-6 py-4 flex items-center justify-between hover:bg-slate-800/30 transition-colors">
+            <div>
+              <h2 class="text-xl font-bold text-slate-100"><i class="fa-solid fa-layer-group mr-2 text-violet-400"></i>Permission Groups</h2>
+              <p class="text-slate-400 text-sm">Bundles of permissions that can be assigned to users. Groups can only grant — they never revoke.</p>
+            </div>
+            <button id="new-group-btn" type="button" class="px-3 py-1.5 bg-violet-700 hover:bg-violet-600 text-white rounded-lg text-sm font-medium" onclick="event.preventDefault(); event.stopPropagation();">
+              <i class="fa-solid fa-plus mr-1"></i>New Group
+            </button>
+          </summary>
+          <div class="border-t border-slate-800 p-4">
+            <div id="groups-list" class="space-y-2">
+              <p class="text-slate-500 text-sm text-center py-4">Loading groups...</p>
+            </div>
+          </div>
+        </details>
+
         <!-- Actions Bar -->
         <div class="mb-6 flex items-center justify-between">
           <div>
@@ -192,6 +210,67 @@
             </button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <!-- Group Editor Modal -->
+    <div id="group-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div class="bg-slate-900 border border-slate-700 rounded-xl max-w-2xl w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between mb-4">
+          <h3 id="group-modal-title" class="text-xl font-bold">Edit Group</h3>
+          <button id="close-group-modal" class="text-slate-400 hover:text-slate-200"><i class="fa-solid fa-times text-xl"></i></button>
+        </div>
+        <form id="group-form" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">Name</label>
+            <input id="group-name" type="text" required maxlength="64" class="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">Description (optional)</label>
+            <input id="group-description" type="text" maxlength="256" class="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">Permissions</label>
+            <div id="group-permissions-list" class="space-y-1 max-h-72 overflow-y-auto border border-slate-700 rounded-lg p-3 bg-slate-950/50">
+              <p class="text-slate-500 text-sm">Loading...</p>
+            </div>
+          </div>
+          <div id="group-error" class="hidden p-3 bg-red-900/20 border border-red-800 rounded-lg text-red-400 text-sm"></div>
+          <div class="flex gap-3 pt-2">
+            <button type="button" id="group-cancel-btn" class="flex-1 px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700">Cancel</button>
+            <button type="submit" class="flex-1 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- User Permissions Modal -->
+    <div id="user-perms-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div class="bg-slate-900 border border-slate-700 rounded-xl max-w-2xl w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between mb-4">
+          <h3 id="user-perms-title" class="text-xl font-bold">Permissions</h3>
+          <button id="close-user-perms-modal" class="text-slate-400 hover:text-slate-200"><i class="fa-solid fa-times text-xl"></i></button>
+        </div>
+        <p class="text-sm text-slate-400 mb-4">Groups bundle permissions; extras grant specific permissions on top. Both are additive — they only add to what the user's role already grants.</p>
+        <div class="space-y-4">
+          <div>
+            <h4 class="text-sm font-semibold text-slate-300 mb-2">Groups</h4>
+            <div id="user-groups-list" class="space-y-1 max-h-48 overflow-y-auto border border-slate-700 rounded-lg p-3 bg-slate-950/50">
+              <p class="text-slate-500 text-sm">Loading...</p>
+            </div>
+          </div>
+          <div>
+            <h4 class="text-sm font-semibold text-slate-300 mb-2">Extra Permissions</h4>
+            <div id="user-extras-list" class="space-y-1 max-h-72 overflow-y-auto border border-slate-700 rounded-lg p-3 bg-slate-950/50">
+              <p class="text-slate-500 text-sm">Loading...</p>
+            </div>
+          </div>
+        </div>
+        <div id="user-perms-error" class="hidden mt-3 p-3 bg-red-900/20 border border-red-800 rounded-lg text-red-400 text-sm"></div>
+        <div class="flex gap-3 pt-4">
+          <button type="button" id="user-perms-cancel-btn" class="flex-1 px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700">Cancel</button>
+          <button type="button" id="user-perms-save-btn" class="flex-1 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium">Save</button>
+        </div>
       </div>
     </div>
 
