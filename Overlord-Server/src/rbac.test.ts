@@ -9,6 +9,7 @@ import {
   getPermissionDescription,
   getRoleDescription,
   getRolePermissions,
+  listAllPermissions,
   type Permission,
 } from "./rbac";
 import type { AuthenticatedUser } from "./auth";
@@ -295,6 +296,36 @@ describe("getRolePermissions", () => {
 
   test("viewer gets nothing", () => {
     expect(getRolePermissions("viewer")).toHaveLength(0);
+  });
+});
+
+describe("listAllPermissions", () => {
+  test("returns every key declared in the PERMISSIONS registry", () => {
+    const perms = listAllPermissions();
+    // Spot-check a sampling of permissions we know exist — if any are missing,
+    // the route-layer sanitizer would silently strip them.
+    expect(perms).toContain("users:manage" as Permission);
+    expect(perms).toContain("clients:control" as Permission);
+    expect(perms).toContain("clients:disconnect" as Permission);
+    expect(perms).toContain("clients:reconnect" as Permission);
+    expect(perms).toContain("clients:metadata" as Permission);
+    expect(perms).toContain("clients:uninstall" as Permission);
+    expect(perms).toContain("system:configure" as Permission);
+    expect(perms).toContain("network:manage-bans" as Permission);
+  });
+
+  test("returns the same length as the description coverage (every entry has a description)", () => {
+    const perms = listAllPermissions();
+    for (const p of perms) {
+      const desc = getPermissionDescription(p);
+      expect(desc).not.toBe("Unknown permission");
+      expect(desc.length).toBeGreaterThan(0);
+    }
+  });
+
+  test("has no duplicates", () => {
+    const perms = listAllPermissions();
+    expect(new Set(perms).size).toBe(perms.length);
   });
 });
 

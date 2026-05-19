@@ -14,34 +14,13 @@ import {
 } from "../../users";
 import {
   getPermissionDescription,
-  type Permission,
+  listAllPermissions,
   requirePermission,
 } from "../../rbac";
 
-const KNOWN_PERMISSIONS: Permission[] = [
-  "users:manage",
-  "clients:control",
-  "clients:build",
-  "clients:enroll",
-  "clients:silent-exec",
-  "clients:disconnect",
-  "clients:reconnect",
-  "clients:metadata",
-  "clients:uninstall",
-  "clients:winre",
-  "audit:view",
-  "chat:write",
-  "scripts:manage",
-  "deploys:manage",
-  "plugins:manage",
-  "plugins:configure",
-  "network:manage-bans",
-  "system:configure",
-];
-
 function sanitizePermissions(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
-  const known = new Set<string>(KNOWN_PERMISSIONS);
+  const known = new Set<string>(listAllPermissions());
   return Array.from(
     new Set(
       raw
@@ -79,7 +58,7 @@ export async function handlePermissionGroupsRoutes(
       return new Response("Forbidden", { status: 403 });
     }
     return Response.json({
-      permissions: KNOWN_PERMISSIONS.map((p) => ({
+      permissions: listAllPermissions().map((p) => ({
         id: p,
         description: getPermissionDescription(p),
       })),

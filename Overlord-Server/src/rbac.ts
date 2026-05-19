@@ -95,6 +95,10 @@ const PERMISSIONS = {
 
 export type Permission = keyof typeof PERMISSIONS;
 
+export function listAllPermissions(): Permission[] {
+  return Object.keys(PERMISSIONS) as Permission[];
+}
+
 function lookupPermission(permission: string): PermissionDef | undefined {
   return (PERMISSIONS as Record<string, PermissionDef>)[permission];
 }
