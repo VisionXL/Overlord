@@ -136,3 +136,88 @@ func closeH264EncoderLocked() {
 	h264FPS = 0
 	h264Buf.Reset()
 }
+
+var (
+	hvncH264Mu      sync.Mutex
+	hvncH264Enc     *x264.Encoder
+	hvncH264Buf     bytes.Buffer
+	hvncH264Width   int
+	hvncH264Height  int
+	hvncH264FPS     int
+	hvncH264Scratch []byte
+)
+
+func encodeH264FrameHVNC(img *image.RGBA) ([]byte, error) {
+	bounds := img.Bounds()
+	width := bounds.Dx()
+	height := bounds.Dy()
+
+	hvncH264Mu.Lock()
+	defer hvncH264Mu.Unlock()
+
+	if err := ensureHVNCH264EncoderLocked(width, height); err != nil {
+		return nil, err
+	}
+
+	hvncH264Buf.Reset()
+	if err := hvncH264Enc.Encode(img); err != nil {
+		return nil, err
+	}
+
+	n := hvncH264Buf.Len()
+	if n == 0 {
+		return nil, nil
+	}
+	if cap(hvncH264Scratch) < n {
+		hvncH264Scratch = make([]byte, n, n+(n/4))
+	} else {
+		hvncH264Scratch = hvncH264Scratch[:n]
+	}
+	copy(hvncH264Scratch, hvncH264Buf.Bytes())
+	return hvncH264Scratch, nil
+}
+
+func resetH264EncoderHVNC() {
+	hvncH264Mu.Lock()
+	defer hvncH264Mu.Unlock()
+	closeHVNCH264EncoderLocked()
+}
+
+func ensureHVNCH264EncoderLocked(width, height int) error {
+	fps := activeH264FPS()
+	if hvncH264Enc != nil && hvncH264Width == width && hvncH264Height == height && hvncH264FPS == fps {
+		return nil
+	}
+	closeHVNCH264EncoderLocked()
+	opts := &x264.Options{
+		Width:        width,
+		Height:       height,
+		FrameRate:    fps,
+		Tune:         "zerolatency",
+		Preset:       "veryfast",
+		Profile:      "main",
+		RateControl:  "crf",
+		RateConstant: 23,
+		LogLevel:     x264.LogError,
+	}
+	enc, err := x264.NewEncoder(&hvncH264Buf, opts)
+	if err != nil {
+		return err
+	}
+	hvncH264Enc = enc
+	hvncH264Width = width
+	hvncH264Height = height
+	hvncH264FPS = fps
+	return nil
+}
+
+func closeHVNCH264EncoderLocked() {
+	if hvncH264Enc != nil {
+		_ = hvncH264Enc.Close()
+		hvncH264Enc = nil
+	}
+	hvncH264Width = 0
+	hvncH264Height = 0
+	hvncH264FPS = 0
+	hvncH264Buf.Reset()
+}

@@ -418,6 +418,10 @@ var (
 
 	prevMu    sync.Mutex
 	prevFrame *prevImage
+
+	hvncPrevMu       sync.Mutex
+	hvncPrevFrame    *prevImage
+	hvncLastKeyframe atomic.Int64
 )
 
 type prevImage struct {
@@ -713,14 +717,14 @@ func buildFrameHVNC(img *image.RGBA, display int, quality int) (wire.Frame, time
 			codec = "jpeg"
 		} else {
 			if webrtcpub.ConsumeKeyframeRequest() {
-				resetH264Encoder()
+				resetH264EncoderHVNC()
 			}
-			h264Bytes, err := encodeH264Frame(img)
+			h264Bytes, err := encodeH264FrameHVNC(img)
 			if err == nil && len(h264Bytes) > 0 {
-				prevMu.Lock()
-				copyPrev(img)
-				prevMu.Unlock()
-				lastKeyframe.Store(now.UnixNano())
+				hvncPrevMu.Lock()
+				copyPrevHVNC(img)
+				hvncPrevMu.Unlock()
+				hvncLastKeyframe.Store(now.UnixNano())
 				statFullFrames.Add(1)
 				frame := wire.Frame{Type: "frame", Header: wire.FrameHeader{Monitor: display, FPS: 0, Format: "h264", HVNC: true}, Data: h264Bytes}
 				return frame, time.Since(encStart), nil
@@ -737,16 +741,16 @@ func buildFrameHVNC(img *image.RGBA, display int, quality int) (wire.Frame, time
 		}
 	}
 
-	prevMu.Lock()
-	pf := prevFrame
-	prevMu.Unlock()
+	hvncPrevMu.Lock()
+	pf := hvncPrevFrame
+	hvncPrevMu.Unlock()
 
-	if pf == nil || pf.w != width || pf.h != height || now.Sub(time.Unix(0, lastKeyframe.Load())) > keyframeEvery {
+	if pf == nil || pf.w != width || pf.h != height || now.Sub(time.Unix(0, hvncLastKeyframe.Load())) > keyframeEvery {
 		jpegBytes, err := encodeJPEG(img, quality)
-		prevMu.Lock()
-		copyPrev(img)
-		prevMu.Unlock()
-		lastKeyframe.Store(now.UnixNano())
+		hvncPrevMu.Lock()
+		copyPrevHVNC(img)
+		hvncPrevMu.Unlock()
+		hvncLastKeyframe.Store(now.UnixNano())
 		statFullFrames.Add(1)
 		frame := wire.Frame{Type: "frame", Header: wire.FrameHeader{Monitor: display, FPS: 0, Format: "jpeg", HVNC: true}, Data: jpegBytes}
 		return frame, time.Since(encStart), err
@@ -772,10 +776,10 @@ func buildFrameHVNC(img *image.RGBA, display int, quality int) (wire.Frame, time
 
 	if changedRatio > maxBlockRatio {
 		jpegBytes, err := encodeJPEG(img, quality)
-		prevMu.Lock()
-		copyPrev(img)
-		prevMu.Unlock()
-		lastKeyframe.Store(now.UnixNano())
+		hvncPrevMu.Lock()
+		copyPrevHVNC(img)
+		hvncPrevMu.Unlock()
+		hvncLastKeyframe.Store(now.UnixNano())
 		statBlockFallbacks.Add(1)
 		statFullFrames.Add(1)
 		frame := wire.Frame{Type: "frame", Header: wire.FrameHeader{Monitor: display, FPS: 0, Format: "jpeg", HVNC: true}, Data: jpegBytes}
@@ -1315,6 +1319,22 @@ func copyPrev(img *image.RGBA) {
 	}
 }
 
+func copyPrevHVNC(img *image.RGBA) {
+	width := img.Bounds().Dx()
+	height := img.Bounds().Dy()
+	n := len(img.Pix)
+	if hvncPrevFrame != nil && cap(hvncPrevFrame.pix) >= n {
+		hvncPrevFrame.w = width
+		hvncPrevFrame.h = height
+		hvncPrevFrame.pix = hvncPrevFrame.pix[:n]
+		copy(hvncPrevFrame.pix, img.Pix)
+	} else {
+		buf := make([]byte, n)
+		copy(buf, img.Pix)
+		hvncPrevFrame = &prevImage{w: width, h: height, pix: buf}
+	}
+}
+
 func encodeBlockRaw(img *image.RGBA, x, y, w, h int) []byte {
 	stride := img.Stride
 	buf := make([]byte, w*h*4)
@@ -1470,7 +1490,7 @@ func sendBlackFrameHVNC(ctx context.Context, env *rt.Env) error {
 
 	img := image.NewRGBA(image.Rect(0, 0, 64, 64))
 	quality := 60
-	frame, _, err := buildFrame(img, 0, quality)
+	frame, _, err := buildFrameHVNC(img, 0, quality)
 	if err != nil {
 		return err
 	}

@@ -21,4 +21,10 @@ func h264AvailabilityDetail() string {
 
 func resetH264Encoder() {}
 
+func resetH264EncoderHVNC() {}
+
+func encodeH264FrameHVNC(_ *image.RGBA) ([]byte, error) {
+	return nil, errors.New("h264 support not available (cgo disabled)")
+}
+
 func SetH264TargetFPS(_ int) {}
