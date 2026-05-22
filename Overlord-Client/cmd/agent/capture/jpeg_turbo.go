@@ -21,3 +21,12 @@ func encodeJPEG(img image.Image, quality int) ([]byte, error) {
 	}
 	return buf.Bytes(), nil
 }
+
+func encodeJPEGToBuf(dst *bytes.Buffer, img image.Image, quality int) error {
+	opts := &ljpeg.EncoderOptions{
+		Quality:        quality,
+		OptimizeCoding: true,
+		DCTMethod:      ljpeg.DCTISlow,
+	}
+	return ljpeg.Encode(dst, img, opts)
+}

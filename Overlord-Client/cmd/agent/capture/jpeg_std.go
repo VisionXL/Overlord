@@ -27,3 +27,15 @@ func encodeJPEG(img image.Image, quality int) ([]byte, error) {
 	jpegBufPool.Put(buf)
 	return out, nil
 }
+
+func encodeJPEGToBuf(dst *bytes.Buffer, img image.Image, quality int) error {
+	buf := jpegBufPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	if err := jpeg.Encode(buf, img, &jpeg.Options{Quality: quality}); err != nil {
+		jpegBufPool.Put(buf)
+		return err
+	}
+	dst.Write(buf.Bytes())
+	jpegBufPool.Put(buf)
+	return nil
+}
