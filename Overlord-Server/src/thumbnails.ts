@@ -14,17 +14,41 @@ async function getSharp(): Promise<any> {
   }
 }
 
-const THUMBNAIL_WIDTH = Math.max(64, Number(process.env.OVERLORD_THUMBNAIL_WIDTH || 1920));
-const THUMBNAIL_HEIGHT = Math.max(48, Number(process.env.OVERLORD_THUMBNAIL_HEIGHT || 1080));
+const THUMBNAIL_WIDTH = Math.max(64, Number(process.env.OVERLORD_THUMBNAIL_WIDTH || 400));
+const THUMBNAIL_HEIGHT = Math.max(48, Number(process.env.OVERLORD_THUMBNAIL_HEIGHT || 225));
 const THUMBNAIL_QUALITY = Math.min(95, Math.max(40, Number(process.env.OVERLORD_THUMBNAIL_QUALITY || 88)));
 const MAX_THUMBNAIL_SOURCE_BYTES = Math.max(
   256 * 1024,
-  Number(process.env.OVERLORD_THUMBNAIL_MAX_SOURCE_BYTES || 16 * 1024 * 1024),
+  Number(process.env.OVERLORD_THUMBNAIL_MAX_SOURCE_BYTES || 8 * 1024 * 1024),
 );
 const THUMBNAIL_CACHE_MAX = Math.max(
   64,
   Number(process.env.OVERLORD_THUMBNAIL_CACHE_MAX || 2000),
 );
+const MAX_CONCURRENT_THUMBNAIL_GEN = Math.max(
+  1,
+  Number(process.env.OVERLORD_THUMBNAIL_CONCURRENCY || 4),
+);
+let _activeThumbnailGen = 0;
+const _thumbnailGenQueue: Array<() => void> = [];
+
+function withThumbnailSlot<T>(fn: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const run = () => {
+      _activeThumbnailGen++;
+      fn().then(resolve, reject).finally(() => {
+        _activeThumbnailGen--;
+        const next = _thumbnailGenQueue.shift();
+        if (next) next();
+      });
+    };
+    if (_activeThumbnailGen < MAX_CONCURRENT_THUMBNAIL_GEN) {
+      run();
+    } else {
+      _thumbnailGenQueue.push(run);
+    }
+  });
+}
 
 type ThumbnailRecord = {
   bytes: Uint8Array;
@@ -157,12 +181,14 @@ export async function requestThumbnailRegen(id: string): Promise<boolean> {
   state.inFlight = true;
   let didGenerate = false;
   try {
-    while (true) {
-      state.pending = false;
-      const ok = await generateThumbnail(id);
-      if (ok) didGenerate = true;
-      if (!state.pending) break;
-    }
+    await withThumbnailSlot(async () => {
+      while (true) {
+        state!.pending = false;
+        const ok = await generateThumbnail(id);
+        if (ok) didGenerate = true;
+        if (!state!.pending) break;
+      }
+    });
   } finally {
     state.inFlight = false;
     if (thumbnailGenState.get(id) === state && !state.pending) {

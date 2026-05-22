@@ -31,12 +31,21 @@
               Approve or deny clients before they can connect to the server.
             </p>
           </div>
-          <div class="flex items-center gap-4">
+          <div class="flex items-center gap-3 flex-wrap justify-end">
             <div id="stats-bar" class="flex items-center gap-3 text-sm">
               <span class="text-amber-400"><i class="fa-solid fa-clock mr-1"></i><span id="stat-pending">0</span> pending</span>
               <span class="text-emerald-400"><i class="fa-solid fa-check mr-1"></i><span id="stat-approved">0</span> approved</span>
               <span class="text-red-400"><i class="fa-solid fa-ban mr-1"></i><span id="stat-denied">0</span> denied</span>
               <span class="text-rose-400"><i class="fa-solid fa-shield-halved mr-1"></i><span id="stat-banned-ips">0</span> banned IPs</span>
+            </div>
+            <div class="flex items-center gap-2 border border-amber-500/30 rounded-lg px-3 py-2 bg-amber-500/5 text-sm" title="When enabled, all connecting agents are approved automatically without review">
+              <i class="fa-solid fa-door-open text-amber-400"></i>
+              <span class="text-slate-300 font-medium">Always Allow</span>
+              <label class="relative inline-flex items-center cursor-pointer ml-1">
+                <input type="checkbox" id="auto-accept-toggle" class="sr-only peer" />
+                <div class="w-9 h-5 bg-slate-700 peer-checked:bg-amber-500 rounded-full transition-colors"></div>
+                <div class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-4"></div>
+              </label>
             </div>
           </div>
         </div>
@@ -60,6 +69,10 @@
             <i class="fa-solid fa-shield-halved mr-1"></i>Banned IPs
           </button>
           <div class="flex-1"></div>
+          <button id="approve-all-btn"
+            class="hidden px-3 py-2 rounded-lg text-sm font-medium bg-emerald-700 hover:bg-emerald-800 text-white transition-colors">
+            <i class="fa-solid fa-check-double mr-1"></i>Approve All Pending
+          </button>
           <div class="relative">
             <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm pointer-events-none"></i>
             <input type="text" id="search-input" placeholder="Search host, user, IP..."
@@ -194,6 +207,39 @@
           <button id="ban-modal-confirm"
             class="px-4 py-2 rounded-lg text-sm font-medium bg-rose-600 hover:bg-rose-700 text-white transition-colors">
             <i class="fa-solid fa-shield-halved mr-1"></i>Ban
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Always Allow Warning Modal -->
+    <div id="auto-accept-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center">
+      <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" id="auto-accept-modal-backdrop"></div>
+      <div class="relative bg-slate-900 border border-amber-500/40 rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="flex-shrink-0 w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center">
+            <i class="fa-solid fa-triangle-exclamation text-amber-400 text-xl"></i>
+          </div>
+          <div>
+            <h3 class="text-lg font-bold text-slate-100">Disable Approval Requirement?</h3>
+            <p class="text-sm text-amber-400">This disables all enrollment security.</p>
+          </div>
+        </div>
+        <div class="mb-5 text-sm text-slate-300 space-y-2">
+          <p>With <strong class="text-amber-300">Always Allow</strong> enabled, <strong>any agent that connects will be automatically approved</strong> without manual review.</p>
+          <p class="bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 text-amber-200">
+            <i class="fa-solid fa-triangle-exclamation mr-1"></i>
+            This effectively disables all enrollment security. Any machine running your agent binary will gain immediate access to the server.
+          </p>
+        </div>
+        <div class="flex items-center justify-end gap-3">
+          <button id="auto-accept-modal-cancel"
+            class="px-4 py-2 rounded-lg text-sm font-medium bg-slate-700 hover:bg-slate-600 text-white transition-colors">
+            Cancel
+          </button>
+          <button id="auto-accept-modal-confirm"
+            class="px-4 py-2 rounded-lg text-sm font-medium bg-amber-600 hover:bg-amber-700 text-white transition-colors">
+            <i class="fa-solid fa-door-open mr-1"></i>Enable Always Allow
           </button>
         </div>
       </div>

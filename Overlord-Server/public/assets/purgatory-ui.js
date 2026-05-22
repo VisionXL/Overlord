@@ -25,6 +25,12 @@ const banModalBody = document.getElementById("ban-modal-body");
 const banModalConfirm = document.getElementById("ban-modal-confirm");
 const banModalCancel = document.getElementById("ban-modal-cancel");
 const banModalBackdrop = document.getElementById("ban-modal-backdrop");
+const autoAcceptToggle = document.getElementById("auto-accept-toggle");
+const autoAcceptModal = document.getElementById("auto-accept-modal");
+const autoAcceptModalConfirm = document.getElementById("auto-accept-modal-confirm");
+const autoAcceptModalCancel = document.getElementById("auto-accept-modal-cancel");
+const autoAcceptModalBackdrop = document.getElementById("auto-accept-modal-backdrop");
+const approveAllBtn = document.getElementById("approve-all-btn");
 
 let currentFilter = "pending";
 let searchQuery = "";
@@ -36,6 +42,13 @@ async function api(path, opts = {}) {
   const res = await fetch(path, { credentials: "include", ...opts });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
+}
+
+async function loadSettings() {
+  try {
+    const s = await api("/api/enrollment/settings");
+    autoAcceptToggle.checked = !s.requireApproval;
+  } catch {}
 }
 
 async function loadStats() {
@@ -89,6 +102,9 @@ async function loadClients() {
     : clients;
 
   loadingRow.classList.add("hidden");
+
+  const hasPending = currentFilter === "pending" && filtered.some((c) => (c.enrollmentStatus || "pending") === "pending");
+  approveAllBtn.classList.toggle("hidden", !hasPending);
 
   if (filtered.length === 0) {
     emptyEl.classList.remove("hidden");
@@ -251,6 +267,7 @@ document.querySelectorAll(".enrollment-tab").forEach((tab) => {
       if (clientsTable) clientsTable.classList.add("hidden");
       emptyEl.classList.add("hidden");
       bannedIpsSection.classList.remove("hidden");
+      approveAllBtn.classList.add("hidden");
       loadBannedIps();
     } else {
       bannedIpsSection.classList.add("hidden");
@@ -446,7 +463,70 @@ confirmBanBtn.addEventListener("click", async () => {
   await Promise.all([loadBannedIps(), loadStats()]);
 });
 
+// ── Always Allow toggle ────────────────────────────────────────────
+autoAcceptToggle.addEventListener("change", async () => {
+  const wantsAlwaysAllow = autoAcceptToggle.checked;
+  if (wantsAlwaysAllow) {
+    autoAcceptToggle.checked = false; // revert until confirmed
+    autoAcceptModal.classList.remove("hidden");
+  } else {
+    try {
+      await api("/api/enrollment/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requireApproval: true }),
+      });
+      if (window.showToast) window.showToast("Approval required — purgatory is active", "success");
+    } catch (e) {
+      autoAcceptToggle.checked = true; // revert on error
+      if (window.showToast) window.showToast(`Failed: ${e.message}`, "error");
+    }
+  }
+});
+
+function closeAutoAcceptModal() {
+  autoAcceptModal.classList.add("hidden");
+}
+
+autoAcceptModalCancel.addEventListener("click", closeAutoAcceptModal);
+autoAcceptModalBackdrop.addEventListener("click", closeAutoAcceptModal);
+
+autoAcceptModalConfirm.addEventListener("click", async () => {
+  closeAutoAcceptModal();
+  try {
+    await api("/api/enrollment/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ requireApproval: false }),
+    });
+    autoAcceptToggle.checked = true;
+    if (window.showToast) window.showToast("Always Allow enabled — agents auto-approved on connect", "success");
+  } catch (e) {
+    if (window.showToast) window.showToast(`Failed: ${e.message}`, "error");
+  }
+});
+
+// ── Approve All Pending ────────────────────────────────────────────
+approveAllBtn.addEventListener("click", async () => {
+  const pendingIds = clients
+    .filter((c) => (c.enrollmentStatus || "pending") === "pending")
+    .map((c) => c.id);
+  if (pendingIds.length === 0) return;
+  try {
+    await api("/api/enrollment/bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: pendingIds, action: "approve" }),
+    });
+    if (window.showToast) window.showToast(`Approved ${pendingIds.length} client${pendingIds.length !== 1 ? "s" : ""}`, "success");
+  } catch (e) {
+    if (window.showToast) window.showToast(`Failed: ${e.message}`, "error");
+  }
+  await Promise.all([loadClients(), loadStats()]);
+});
+
 // ── Init ───────────────────────────────────────────────────────────
+loadSettings();
 loadStats();
 loadClients();
 
