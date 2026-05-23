@@ -710,7 +710,6 @@ func (s *duplicationState) capture(display int) (*image.RGBA, error) {
 			if img == s.lastBase || img == s.cursorScratch {
 				img = cloneRGBA(img)
 			}
-			s.lastFrame = cloneRGBA(img)
 			s.lastFrameAt = time.Now()
 			return img, nil
 		}
@@ -808,7 +807,7 @@ func (s *duplicationState) capture(display int) (*image.RGBA, error) {
 		// the next compose doesn't write into a buffer the caller has pooled.
 		img = cloneRGBA(img)
 	}
-	s.lastFrame = cloneRGBA(img)
+	s.lastFrame = nil
 	s.lastFrameAt = time.Now()
 
 	return img, nil
