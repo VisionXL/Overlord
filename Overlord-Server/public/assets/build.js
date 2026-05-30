@@ -324,7 +324,6 @@ const CRYPTABLE_DISABLE_TARGETS = [
   'input[name="enable-persistence"]',
   'input[name="enable-upx"]',
   'input[name="upx-strip-headers"]',
-  'input[name="hide-console"]',
   'input[name="require-admin"]',
   'input[name="critical-process"]',
 ];

