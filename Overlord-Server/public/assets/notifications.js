@@ -11,13 +11,14 @@ import {
   requestDesktopNotificationPermission,
   setDesktopNotificationsEnabled,
 } from "./notify-client.js";
+import { createMonacoEditorAdapter, loadMonaco } from "./monaco-loader.js";
+import { TabulatorFull as Tabulator } from "/vendor/tabulator/tabulator_esm.min.js";
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const wsStatus = document.getElementById("ws-status");
-const listEl = document.getElementById("notification-list");
+const tableEl = document.getElementById("notification-table");
 const emptyState = document.getElementById("empty-state");
 const notificationScopeHint = document.getElementById("notification-scope-hint");
-const tableHead = document.getElementById("notification-thead");
 const searchInput = document.getElementById("notification-search");
 const resultHint = document.getElementById("notification-result-hint");
 
@@ -83,6 +84,7 @@ const MAX_ROWS = 200;
 let defaultWebhookTemplate = "";
 let defaultTelegramTemplate = "";
 let webhookTemplateEditor = null;
+let notificationTable = null;
 
 function tryFormatJsonText(text) {
   const source = String(text || "").trim();
@@ -94,26 +96,57 @@ function tryFormatJsonText(text) {
   }
 }
 
-function initWebhookTemplateEditor() {
-  if (!webhookTemplateInput || typeof window.ace === "undefined") return;
+async function initWebhookTemplateEditor() {
+  if (!webhookTemplateInput) return;
   try {
-    webhookTemplateEditor = window.ace.edit("webhook-template");
-    webhookTemplateEditor.setTheme("ace/theme/tomorrow_night");
-    webhookTemplateEditor.session.setMode("ace/mode/json");
-    webhookTemplateEditor.session.setUseWrapMode(true);
-    webhookTemplateEditor.setShowPrintMargin(false);
-    webhookTemplateEditor.setOption("fontSize", "12px");
-    webhookTemplateEditor.setOption("tabSize", 2);
-    webhookTemplateEditor.setOption("useSoftTabs", true);
-    webhookTemplateEditor.on("blur", () => {
-      const formatted = tryFormatJsonText(webhookTemplateEditor.getValue());
-      if (formatted !== null && formatted !== webhookTemplateEditor.getValue()) {
-        const position = webhookTemplateEditor.getCursorPosition();
-        webhookTemplateEditor.setValue(formatted, -1);
-        webhookTemplateEditor.moveCursorToPosition(position);
+    const monaco = await loadMonaco();
+    const host = document.createElement("div");
+    host.className = "w-full rounded-lg border border-slate-800 overflow-hidden";
+    host.style.height = "180px";
+    webhookTemplateInput.classList.add("hidden");
+    webhookTemplateInput.insertAdjacentElement("afterend", host);
+
+    monaco.editor.defineTheme("overlord-json", {
+      base: "vs-dark",
+      inherit: true,
+      rules: [],
+      colors: {
+        "editor.background": "#020617",
+        "editor.foreground": "#e2e8f0",
+        "editor.lineHighlightBackground": "#0f172a",
+        "editorCursor.foreground": "#38bdf8",
+        "editor.selectionBackground": "#2563eb66",
+        "editorGutter.background": "#020617",
+      },
+    });
+
+    const editor = monaco.editor.create(host, {
+      value: webhookTemplateInput.value || "",
+      language: "json",
+      theme: "overlord-json",
+      automaticLayout: true,
+      fontFamily: '"JetBrains Mono", Consolas, "Courier New", monospace',
+      fontSize: 12,
+      minimap: { enabled: false },
+      scrollBeyondLastLine: false,
+      tabSize: 2,
+      insertSpaces: true,
+      wordWrap: "on",
+      padding: { top: 8, bottom: 8 },
+    });
+
+    webhookTemplateEditor = createMonacoEditorAdapter(editor, monaco);
+    editor.onDidBlurEditorWidget(() => {
+      const current = webhookTemplateEditor.getValue();
+      const formatted = tryFormatJsonText(current);
+      if (formatted !== null && formatted !== current) {
+        const position = editor.getPosition();
+        webhookTemplateEditor.setValue(formatted);
+        if (position) editor.setPosition(position);
       }
     });
-  } catch {
+  } catch (err) {
+    console.warn("Monaco webhook editor unavailable; falling back to textarea", err);
     webhookTemplateEditor = null;
   }
 }
@@ -247,6 +280,35 @@ function compareEntries(a, b) {
   return tableState.sortDir === "asc" ? cmp : -cmp;
 }
 
+function sourceHtml(entry) {
+  if (entry.kind === "event") {
+    return CLIENT_EVENT_BADGE[entry.item.event] ||
+      `<span class="text-xs text-slate-400">${escapeHtml(entry.item.event)}</span>`;
+  }
+  const isClipboard = entry.item.category === "clipboard";
+  return isClipboard
+    ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-violet-900/60 text-violet-300 border border-violet-700/50"><i class="fa-solid fa-clipboard text-xs"></i> clipboard</span>`
+    : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-blue-900/60 text-blue-300 border border-blue-700/50"><i class="fa-solid fa-desktop text-xs"></i> window</span>`;
+}
+
+function entryToRow(entry) {
+  const item = entry.item;
+  return {
+    uid: entry.uid,
+    kind: entry.kind,
+    item,
+    isLive: entry.isLive,
+    ts: Number(item.ts) || 0,
+    clientId: item.clientId || "",
+    user: item.user || "-",
+    title: entry.kind === "event" ? "client event" : (item.title || "-"),
+    process: entry.kind === "event" ? (item.os || "-") : (item.process || "-"),
+    keyword: entry.kind === "event" ? "-" : (item.keyword || "-"),
+    source: entry.kind === "event" ? (item.event || "") : (item.category || "window"),
+    sourceHtml: sourceHtml(entry),
+  };
+}
+
 function entryMatchesSearch(entry, query) {
   if (!query) return true;
   const item = entry.item;
@@ -268,16 +330,12 @@ function entryMatchesSearch(entry, query) {
 }
 
 function applyTableView() {
-  if (!listEl) return;
   const q = tableState.search.trim().toLowerCase();
   const all = Array.from(tableState.entries.values());
   const filtered = q ? all.filter((entry) => entryMatchesSearch(entry, q)) : all;
   filtered.sort(compareEntries);
-
-  listEl.innerHTML = "";
-  for (const entry of filtered) {
-    listEl.appendChild(entry.element);
-  }
+  const rows = filtered.map(entryToRow);
+  if (notificationTable) notificationTable.replaceData(rows);
 
   if (emptyState) {
     if (all.length === 0) {
@@ -317,11 +375,7 @@ function upsertEntry(item, kind, isLive) {
     existing.item = { ...existing.item, ...item };
     return existing;
   }
-  const element =
-    kind === "event"
-      ? createClientEventRowElement(item)
-      : createNotificationRowElement(item, isLive);
-  const entry = { item, kind, element, isLive };
+  const entry = { uid, item, kind, isLive };
   tableState.entries.set(uid, entry);
   trimEntries();
   return entry;
@@ -368,6 +422,95 @@ function clientIdCellHtml(clientId) {
   const safeFull = escapeHtml(id);
   const safeShort = escapeHtml(id.slice(0, CLIENT_ID_SHORT_LEN));
   return `<td class="py-2 pr-4 whitespace-nowrap"><button type="button" class="client-id-toggle inline-flex items-center gap-1 font-mono text-xs px-2 py-0.5 rounded border border-slate-700 bg-slate-900/80 hover:bg-slate-800 hover:border-slate-600 text-slate-300" data-full="${safeFull}" data-short="${safeShort}" title="${safeFull} (click to expand)"><span class="client-id-text">${safeShort}<span class="text-slate-500">…</span></span><i class="fa-solid fa-chevron-right text-[10px] text-slate-500"></i></button></td>`;
+}
+
+function clientIdFormatter(cell) {
+  const id = String(cell.getValue() || "");
+  if (!id) return `<span class="text-slate-500">-</span>`;
+  if (id.length <= CLIENT_ID_SHORT_LEN) {
+    return `<span class="font-mono text-xs text-slate-300">${escapeHtml(id)}</span>`;
+  }
+  const safeFull = escapeHtml(id);
+  const safeShort = escapeHtml(id.slice(0, CLIENT_ID_SHORT_LEN));
+  return `<button type="button" class="client-id-toggle inline-flex items-center gap-1 font-mono text-xs px-2 py-0.5 rounded border border-slate-700 bg-slate-900/80 hover:bg-slate-800 hover:border-slate-600 text-slate-300" data-full="${safeFull}" data-short="${safeShort}" title="${safeFull} (click to expand)"><span class="client-id-text">${safeShort}<span class="text-slate-500">...</span></span><i class="fa-solid fa-chevron-right text-[10px] text-slate-500"></i></button>`;
+}
+
+function previewFormatter(cell) {
+  const row = cell.getRow().getData();
+  const item = row.item || {};
+  const wrapper = document.createElement("div");
+  if (row.kind === "event") {
+    wrapper.textContent = "";
+    return wrapper;
+  }
+
+  const notificationId = item?.id || "";
+  const skipFetch = !notificationId || (!row.isLive && !item?.screenshotId);
+  if (skipFetch) {
+    wrapper.textContent = "-";
+    wrapper.className = "text-slate-500";
+    return wrapper;
+  }
+
+  if (item._previewObjectUrl) {
+    const img = createPreviewImage(item._previewObjectUrl);
+    wrapper.appendChild(img);
+    return wrapper;
+  }
+
+  wrapper.textContent = "Loading...";
+  wrapper.className = "text-slate-500";
+  let attempts = 0;
+  const maxAttempts = 5;
+  const fetchPreview = async () => {
+    attempts += 1;
+    try {
+      const url = `/api/notifications/${encodeURIComponent(notificationId)}/screenshot?ts=${Date.now()}`;
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) {
+        if (res.status === 404 && attempts < maxAttempts) {
+          setTimeout(fetchPreview, 1000 * attempts);
+          return;
+        }
+        wrapper.textContent = "-";
+        wrapper.className = "text-slate-500";
+        return;
+      }
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      item._previewObjectUrl = objectUrl;
+      wrapper.innerHTML = "";
+      wrapper.className = "";
+      wrapper.appendChild(createPreviewImage(objectUrl));
+    } catch {
+      if (attempts < maxAttempts) {
+        setTimeout(fetchPreview, 1000 * attempts);
+        return;
+      }
+      wrapper.textContent = "-";
+      wrapper.className = "text-slate-500";
+    }
+  };
+  fetchPreview();
+  return wrapper;
+}
+
+function createPreviewImage(objectUrl) {
+  const img = document.createElement("img");
+  img.className = "max-h-32 w-auto rounded border border-slate-800/80 cursor-zoom-in opacity-0";
+  img.loading = "lazy";
+  img.alt = "Notification screenshot";
+  img.src = objectUrl;
+  img.dataset.previewUrl = objectUrl;
+  img.addEventListener("load", () => img.classList.remove("opacity-0"));
+  img.addEventListener("click", () => {
+    if (!previewModal || !previewModalImg) return;
+    previewModalImg.src = img.dataset.previewUrl || objectUrl;
+    previewModal.classList.remove("hidden");
+    previewModal.classList.add("flex");
+  });
+  if (img.decode) img.decode().catch(() => {});
+  return img;
 }
 
 // ── Notification row factory ─────────────────────────────────────────────────
@@ -892,26 +1035,9 @@ function wireEventChannelsSave() {
   });
 }
 
-function updateSortIndicators() {
-  if (!tableHead) return;
-  const headers = tableHead.querySelectorAll("th[data-sort-key]");
-  for (const th of headers) {
-    const icon = th.querySelector(".sort-icon");
-    if (!icon) continue;
-    const key = th.getAttribute("data-sort-key");
-    if (key === tableState.sortBy) {
-      icon.className = `sort-icon fa-solid ${tableState.sortDir === "asc" ? "fa-sort-up" : "fa-sort-down"} text-xs text-slate-300`;
-      th.classList.add("text-slate-200");
-    } else {
-      icon.className = "sort-icon fa-solid fa-sort text-xs text-slate-600";
-      th.classList.remove("text-slate-200");
-    }
-  }
-}
-
 function wireClientIdToggle() {
-  if (!listEl) return;
-  listEl.addEventListener("click", (event) => {
+  if (!tableEl) return;
+  tableEl.addEventListener("click", (event) => {
     const btn = event.target.closest(".client-id-toggle");
     if (!btn) return;
     const textEl = btn.querySelector(".client-id-text");
@@ -931,23 +1057,6 @@ function wireClientIdToggle() {
 }
 
 function wireTableControls() {
-  if (tableHead) {
-    tableHead.addEventListener("click", (event) => {
-      const th = event.target.closest("th[data-sort-key]");
-      if (!th) return;
-      const key = th.getAttribute("data-sort-key");
-      if (!key) return;
-      if (tableState.sortBy === key) {
-        tableState.sortDir = tableState.sortDir === "asc" ? "desc" : "asc";
-      } else {
-        tableState.sortBy = key;
-        tableState.sortDir = key === "ts" ? "desc" : "asc";
-      }
-      updateSortIndicators();
-      applyTableView();
-    });
-  }
-
   if (searchInput) {
     let debounce = null;
     searchInput.addEventListener("input", () => {
@@ -958,12 +1067,82 @@ function wireTableControls() {
       }, 100);
     });
   }
+}
 
-  updateSortIndicators();
+function initNotificationTable() {
+  if (!tableEl) return;
+  notificationTable = new Tabulator(tableEl, {
+    data: [],
+    height: "24rem",
+    layout: "fitDataStretch",
+    reactiveData: false,
+    placeholder: "No notifications yet.",
+    virtualDom: true,
+    index: "uid",
+    initialSort: [{ column: "ts", dir: "desc" }],
+    columns: [
+      {
+        title: "Time",
+        field: "ts",
+        width: 190,
+        sorter: "number",
+        formatter: (cell) => `<span class="text-slate-400">${formatTime(cell.getValue())}</span>`,
+      },
+      {
+        title: "Client",
+        field: "clientId",
+        width: 150,
+        formatter: clientIdFormatter,
+      },
+      {
+        title: "User",
+        field: "user",
+        width: 130,
+        formatter: "plaintext",
+      },
+      {
+        title: "Title / Content",
+        field: "title",
+        minWidth: 240,
+        formatter: (cell) => {
+          const row = cell.getRow().getData();
+          const value = escapeHtml(cell.getValue() || "-");
+          const tone = row.kind === "event" ? "italic text-slate-400" : "text-slate-100";
+          return `<span class="${tone}" title="${value}">${value}</span>`;
+        },
+      },
+      {
+        title: "Process",
+        field: "process",
+        width: 160,
+        formatter: "plaintext",
+      },
+      {
+        title: "Keyword",
+        field: "keyword",
+        width: 130,
+        formatter: "plaintext",
+      },
+      {
+        title: "Source",
+        field: "source",
+        width: 140,
+        formatter: (cell) => cell.getRow().getData().sourceHtml || "",
+      },
+      {
+        title: "Preview",
+        field: "uid",
+        width: 180,
+        headerSort: false,
+        formatter: previewFormatter,
+      },
+    ],
+  });
 }
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 initWebhookTemplateEditor();
+initNotificationTable();
 wireKeywordSave();
 wireWebhookSave();
 wireTelegramSave();

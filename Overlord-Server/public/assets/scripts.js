@@ -1,3 +1,5 @@
+import { createMonacoEditorAdapter, loadMonaco } from "./monaco-loader.js";
+
 const clientList = document.getElementById("client-list");
 const clientSearch = document.getElementById("client-search");
 const osFilter = document.getElementById("os-filter");
@@ -29,7 +31,7 @@ let editorInstance = null;
 const EDITOR_MODES = {
   powershell: "powershell",
   bash: "shell",
-  cmd: "shell",
+  cmd: "bat",
   python: "python",
   sh: "shell",
 };
@@ -50,7 +52,11 @@ function setEditorValue(value) {
 function setEditorMode(type) {
   if (!editorInstance) return;
   const mode = EDITOR_MODES[type] || "powershell";
-  editorInstance.setOption("mode", mode);
+  if (typeof editorInstance.setLanguage === "function") {
+    editorInstance.setLanguage(mode);
+  } else if (typeof editorInstance.setOption === "function") {
+    editorInstance.setOption("mode", mode);
+  }
 }
 
 async function checkAuth() {
@@ -785,17 +791,56 @@ Promise.all([
 loadAutoTasks();
 renderTemplatePalette();
 
-if (window.CodeMirror && scriptEditor) {
-  editorInstance = window.CodeMirror.fromTextArea(scriptEditor, {
-    lineNumbers: true,
-    mode: EDITOR_MODES[scriptType?.value || "powershell"] || "powershell",
-    theme: "material-darker",
-    indentUnit: 2,
-    tabSize: 2,
-    lineWrapping: true,
-  });
-  editorInstance.setSize(null, "24rem");
-  window._vbCodeMirror = editorInstance;
+async function initScriptEditor() {
+  if (!scriptEditor) return;
+  try {
+    const monaco = await loadMonaco();
+    const host = document.createElement("div");
+    host.id = "script-editor-monaco";
+    host.className = "w-full flex-1 min-h-[24rem] rounded-lg border border-slate-700 overflow-hidden";
+    host.style.height = "24rem";
+    scriptEditor.classList.add("hidden");
+    scriptEditor.insertAdjacentElement("afterend", host);
+
+    const editor = monaco.editor.create(host, {
+      value: scriptEditor.value || "",
+      language: EDITOR_MODES[scriptType?.value || "powershell"] || "powershell",
+      theme: "vs-dark",
+      automaticLayout: true,
+      fontFamily: '"JetBrains Mono", Consolas, "Courier New", monospace',
+      fontSize: 13,
+      minimap: { enabled: true, side: "right" },
+      scrollBeyondLastLine: false,
+      wordWrap: "on",
+      tabSize: 2,
+      insertSpaces: true,
+      padding: { top: 12, bottom: 12 },
+      renderLineHighlight: "all",
+    });
+
+    monaco.editor.defineTheme("overlord-dark", {
+      base: "vs-dark",
+      inherit: true,
+      rules: [],
+      colors: {
+        "editor.background": "#020617",
+        "editor.foreground": "#e2e8f0",
+        "editor.lineHighlightBackground": "#0f172a",
+        "editorCursor.foreground": "#34d399",
+        "editor.selectionBackground": "#2563eb66",
+        "editorGutter.background": "#020617",
+        "editorLineNumber.foreground": "#64748b",
+        "editorLineNumber.activeForeground": "#cbd5e1",
+      },
+    });
+    monaco.editor.setTheme("overlord-dark");
+
+    editorInstance = createMonacoEditorAdapter(editor, monaco);
+    window._vbCodeMirror = editorInstance;
+    syncEditorHeight();
+  } catch (err) {
+    console.warn("Monaco editor unavailable; falling back to textarea", err);
+  }
 }
 
 const modeToggleCode = document.getElementById("mode-toggle-code");
@@ -824,8 +869,7 @@ function syncEditorHeight() {
   const target = Math.max(384, rightHeight - padY - headerH - headerMb);
   editorInstance.setSize(null, `${target}px`);
 }
-if (editorInstance && rightColumn) {
-  syncEditorHeight();
+if (rightColumn) {
   if (typeof ResizeObserver === "function") {
     const ro = new ResizeObserver(() => syncEditorHeight());
     ro.observe(rightColumn);
@@ -833,6 +877,7 @@ if (editorInstance && rightColumn) {
   window.addEventListener("resize", syncEditorHeight);
   lgMediaQuery.addEventListener?.("change", syncEditorHeight);
 }
+initScriptEditor();
 let visualBuilderInited = false;
 
 function setMode(mode) {
@@ -856,7 +901,7 @@ function setMode(mode) {
     modeToggleCode.className = "flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm transition-colors bg-emerald-600 text-white";
     modeToggleVisual.className = "flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm transition-colors bg-slate-800 text-slate-300 hover:bg-slate-700";
     if (editorInstance) {
-      editorInstance.refresh();
+      editorInstance.refresh?.();
       syncEditorHeight();
     }
   }

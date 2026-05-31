@@ -109,9 +109,12 @@ RUN if [ -f dist-clients/BackstageCapture.x64.dll ]; then \
       echo "WARNING: BackstageCapture DLL not available (build with MSVC on Windows)"; \
     fi
 
-# Tailwind CSS + vendored frontend assets
-RUN bun run build:css && bun run vendor \
-    && test -s ./public/assets/tailwind.css && test -d ./public/vendor/fontawesome
+# Tailwind CSS, vendored frontend assets, and bundled Bun server runtime.
+RUN bun run build \
+    && test -s ./public/assets/tailwind.css \
+    && test -d ./public/vendor/fontawesome \
+    && test -s ./dist/index.js \
+    && test -s ./dist/server/plugin-runtime/worker-host.js
 
 
 # ============================================================
@@ -151,10 +154,8 @@ COPY Overlord-Server/package.json Overlord-Server/bun.lock* ./
 RUN --mount=type=cache,target=/root/.bun/install/cache \
     bun install --production --frozen-lockfile
 
-# Server source.
-COPY Overlord-Server/ ./
-
-# Built artifacts from the builder stage (overwrites anything from the source copy).
+# Built runtime artifacts from the builder stage.
+COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/dist-clients ./dist-clients
 
@@ -180,7 +181,4 @@ ENV NODE_ENV=production
 ENV OVERLORD_ROOT=/app
 ENV NODE_PATH=/app/node_modules
 
-# NOTE: We intentionally do NOT use `bun build --compile` here.
-# The compiled standalone binary runs from a virtual bunfs filesystem that
-# cannot reliably load native modules like `sharp` from /app/node_modules.
-CMD ["bun", "run", "src/index.ts"]
+CMD ["bun", "dist/index.js"]

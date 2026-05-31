@@ -35,6 +35,60 @@
   --color-danger: #ef4444;
 }
 
+.monaco-editor,
+.monaco-editor .margin,
+.monaco-editor-background {
+  --vscode-editor-background: #020617;
+}
+
+.overlord-tabulator.tabulator {
+  background: #020617;
+  border: 1px solid rgb(30 41 59);
+  border-radius: 0.75rem;
+  color: #e2e8f0;
+  min-height: 12rem;
+  overflow: hidden;
+}
+
+.overlord-tabulator .tabulator-header {
+  background: #0f172a;
+  border-bottom-color: rgb(30 41 59);
+  color: #94a3b8;
+}
+
+.overlord-tabulator .tabulator-header .tabulator-col {
+  background: #0f172a;
+  border-right-color: rgb(30 41 59);
+}
+
+.overlord-tabulator .tabulator-header .tabulator-col:hover {
+  background: #162033;
+}
+
+.overlord-tabulator .tabulator-row {
+  background: #020617;
+  border-bottom-color: rgba(30, 41, 59, 0.85);
+  color: #e2e8f0;
+}
+
+.overlord-tabulator .tabulator-row.tabulator-row-even {
+  background: #07101f;
+}
+
+.overlord-tabulator .tabulator-row:hover {
+  background: #111827;
+}
+
+.overlord-tabulator .tabulator-cell {
+  border-right-color: rgba(30, 41, 59, 0.75);
+  padding: 0.5rem 0.75rem;
+}
+
+.overlord-tabulator .tabulator-placeholder {
+  background: #020617;
+  color: #94a3b8;
+}
+
 :root:not(.app-ready) #app-loader {
   opacity: 1;
   visibility: visible;

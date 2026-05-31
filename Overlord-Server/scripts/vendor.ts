@@ -166,6 +166,26 @@ if (existsSync(path.join(leafRoot, "images"))) {
   copyDir(path.join(leafRoot, "images"), path.join(VENDOR, "leaflet", "images"));
 }
 
+/* ── Monaco Editor ───────────────────────────────────────────────── */
+
+console.log("Copying Monaco Editor ...");
+copyDir(
+  path.join(NM, "monaco-editor", "min", "vs"),
+  path.join(VENDOR, "monaco", "vs"),
+);
+
+/* ── Tabulator ───────────────────────────────────────────────────── */
+
+console.log("Copying Tabulator ...");
+copyFile(
+  path.join(NM, "tabulator-tables", "dist", "js", "tabulator_esm.min.js"),
+  path.join(VENDOR, "tabulator", "tabulator_esm.min.js"),
+);
+copyFile(
+  path.join(NM, "tabulator-tables", "dist", "css", "tabulator_midnight.min.css"),
+  path.join(VENDOR, "tabulator", "tabulator_midnight.min.css"),
+);
+
 /* ── highlight.js (bundle core + languages) ──────────────────────── */
 
 console.log("Bundling highlight.js ...");

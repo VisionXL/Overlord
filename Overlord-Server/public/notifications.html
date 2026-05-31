@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="/assets/tailwind.css" />
     <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css" />
     <script defer src="/vendor/msgpackr/msgpackr.js"></script>
-    <script defer src="/vendor/ace-builds/ace.js"></script>
+    <link rel="stylesheet" href="/vendor/tabulator/tabulator_midnight.min.css" />
     <link rel="stylesheet" href="/assets/main.css" />
     <link rel="stylesheet" href="/assets/custom.css" />
     <script defer src="/assets/toast.js"></script>
@@ -171,11 +171,11 @@
                 </button>
               </div>
             </div>
-            <div
+            <textarea
               id="webhook-template"
               class="w-full rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus-within:border-blue-500"
               style="height: 180px;"
-            ></div>
+            ></textarea>
             <p class="mt-1 text-xs text-slate-500">
               Variables: <code class="text-slate-400">{title}</code>
               <code class="text-slate-400">{keyword}</code>
@@ -415,37 +415,7 @@
               <span id="notification-result-hint" class="text-xs text-slate-500"></span>
             </div>
           </div>
-          <div class="overflow-x-auto max-h-96">
-            <table class="min-w-full text-sm">
-              <thead id="notification-thead" class="text-slate-400 sticky top-0 bg-slate-900">
-                <tr class="text-left">
-                  <th class="py-2 pr-4 select-none cursor-pointer hover:text-slate-200" data-sort-key="ts">
-                    <span class="inline-flex items-center gap-1">Time<i class="sort-icon fa-solid fa-sort text-xs text-slate-600"></i></span>
-                  </th>
-                  <th class="py-2 pr-4 select-none cursor-pointer hover:text-slate-200" data-sort-key="clientId">
-                    <span class="inline-flex items-center gap-1">Client<i class="sort-icon fa-solid fa-sort text-xs text-slate-600"></i></span>
-                  </th>
-                  <th class="py-2 pr-4 select-none cursor-pointer hover:text-slate-200" data-sort-key="user">
-                    <span class="inline-flex items-center gap-1">User<i class="sort-icon fa-solid fa-sort text-xs text-slate-600"></i></span>
-                  </th>
-                  <th class="py-2 pr-4 select-none cursor-pointer hover:text-slate-200" data-sort-key="title">
-                    <span class="inline-flex items-center gap-1">Title / Content<i class="sort-icon fa-solid fa-sort text-xs text-slate-600"></i></span>
-                  </th>
-                  <th class="py-2 pr-4 select-none cursor-pointer hover:text-slate-200" data-sort-key="process">
-                    <span class="inline-flex items-center gap-1">Process<i class="sort-icon fa-solid fa-sort text-xs text-slate-600"></i></span>
-                  </th>
-                  <th class="py-2 pr-4 select-none cursor-pointer hover:text-slate-200" data-sort-key="keyword">
-                    <span class="inline-flex items-center gap-1">Keyword<i class="sort-icon fa-solid fa-sort text-xs text-slate-600"></i></span>
-                  </th>
-                  <th class="py-2 pr-4 select-none cursor-pointer hover:text-slate-200" data-sort-key="source">
-                    <span class="inline-flex items-center gap-1">Source<i class="sort-icon fa-solid fa-sort text-xs text-slate-600"></i></span>
-                  </th>
-                  <th class="py-2 pr-4">Preview</th>
-                </tr>
-              </thead>
-              <tbody id="notification-list" class="text-slate-200"></tbody>
-            </table>
-          </div>
+          <div id="notification-table" class="overlord-tabulator"></div>
           <div
             id="empty-state"
             class="py-6 text-center text-slate-400"

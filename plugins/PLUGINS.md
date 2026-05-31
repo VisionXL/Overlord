@@ -1041,7 +1041,7 @@ The SSE stream keeps itself alive with a comment heartbeat every 25 s, which wor
 - **One worker per plugin.** RPC calls into the same plugin serialise. Long-running RPCs block other RPCs to that plugin (not other plugins). Do heavy work in `onEvent` and let RPCs read pre-computed state.
 - **`bun:sqlite` is single-writer per database file.** Since each plugin gets its own DB this is fine; just don't open the same `plugin.db` from another process.
 - **The worker is not a security sandbox.** It has the same filesystem and network access as the main server. Treat `server.js` with the same trust as your other server code, and lean on plugin signing if you load third-party bundles.
-- **Compiled binaries.** Workers spawned from the bundled `--compile` build need the worker host module embedded; if you ship that build, run `bun build` with the worker host included as an entry point or stick with `bun run` for now.
+- **Bundled builds.** Workers spawned from a bundled server need the worker host module emitted beside the main server bundle. The production build does this by building both `src/index.ts` and `src/server/plugin-runtime/worker-host.ts`.
 - **No automatic restart on worker crash.** A crashed worker is logged and `pluginState.lastError` is set, but it will not loop-restart on its own. Disable + re-enable the plugin to bring it back up.
 
 ---

@@ -1,19 +1,3 @@
-let _sharp: any = null;
-let _sharpLoadAttempted = false;
-
-async function getSharp(): Promise<any> {
-  if (_sharp) return _sharp;
-  if (_sharpLoadAttempted) throw new Error("sharp module unavailable");
-  _sharpLoadAttempted = true;
-  try {
-    _sharp = (await import("sharp")).default as any;
-    return _sharp!;
-  } catch (err) {
-    console.error("[thumbnails] Failed to load sharp module. Thumbnails will be unavailable.", err);
-    throw err;
-  }
-}
-
 const THUMBNAIL_WIDTH = Math.max(64, Number(process.env.OVERLORD_THUMBNAIL_WIDTH || 1920));
 const THUMBNAIL_HEIGHT = Math.max(48, Number(process.env.OVERLORD_THUMBNAIL_HEIGHT || 1080));
 const THUMBNAIL_QUALITY = Math.min(95, Math.max(40, Number(process.env.OVERLORD_THUMBNAIL_QUALITY || 88)));
@@ -133,18 +117,16 @@ async function buildThumbnailBytes(bytes: Uint8Array, format: string): Promise<U
     return null;
   }
 
-  const sharp = await getSharp();
-  const output = await sharp(Buffer.from(bytes), { failOn: "none" })
-    .rotate()
-    .resize({
-      width: THUMBNAIL_WIDTH,
-      height: THUMBNAIL_HEIGHT,
+  const output = await new Bun.Image(bytes, {
+    autoOrient: true,
+    maxPixels: THUMBNAIL_WIDTH * THUMBNAIL_HEIGHT * 16,
+  })
+    .resize(THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT, {
       fit: "inside",
       withoutEnlargement: true,
-      fastShrinkOnLoad: true,
     })
     .webp({ quality: THUMBNAIL_QUALITY })
-    .toBuffer();
+    .bytes();
 
   return new Uint8Array(output);
 }

@@ -1,7 +1,7 @@
 import type { ServerWebSocket } from "bun";
 import { decodeMessage, encodeMessage, type WireMessage, type PluginManifest } from "./protocol";
 import { logger } from "./logger";
-import { fileURLToPath } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 import path from "path";
 import fs from "fs/promises";
 import { existsSync } from "node:fs";
@@ -202,6 +202,14 @@ const DEPLOY_ROOT = path.join(DATA_DIR, "deploy");
 const WINRE_ROOT = path.join(DATA_DIR, "winre");
 const FILE_SHARE_ROOT = path.join(DATA_DIR, "file-share");
 
+function resolvePluginWorkerHostUrl(): string {
+  const builtWorker = path.join(RUNTIME_ROOT, "dist", "server", "plugin-runtime", "worker-host.js");
+  if (existsSync(builtWorker)) {
+    return pathToFileURL(builtWorker).href;
+  }
+  return new URL("./server/plugin-runtime/worker-host.ts", import.meta.url).href;
+}
+
 const TLS_CERT_PATH = config.tls.certPath;
 const TLS_KEY_PATH = config.tls.keyPath;
 const TLS_CA_PATH = config.tls.caPath; 
@@ -240,7 +248,7 @@ const loadPluginState = async () => {
 
 const pluginRuntime = createPluginRuntime({
   pluginRoot: PLUGIN_ROOT,
-  workerHostUrl: new URL("./server/plugin-runtime/worker-host.ts", import.meta.url).href,
+  workerHostUrl: resolvePluginWorkerHostUrl(),
   setLastError: (pluginId, error) => {
     pluginState.lastError[pluginId] = error;
     void savePluginState();

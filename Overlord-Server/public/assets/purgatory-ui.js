@@ -1,7 +1,7 @@
-const body = document.getElementById("enrollment-body");
-const loadingRow = document.getElementById("enrollment-loading");
+import { TabulatorFull as Tabulator } from "/vendor/tabulator/tabulator_esm.min.js";
+
+const enrollmentTableEl = document.getElementById("enrollment-table");
 const emptyEl = document.getElementById("enrollment-empty");
-const selectAllEl = document.getElementById("select-all");
 const bulkApproveBtn = document.getElementById("bulk-approve-btn");
 const bulkDenyBtn = document.getElementById("bulk-deny-btn");
 const statPending = document.getElementById("stat-pending");
@@ -10,9 +10,9 @@ const statDenied = document.getElementById("stat-denied");
 const statBannedIps = document.getElementById("stat-banned-ips");
 const searchInput = document.getElementById("search-input");
 const bannedIpsSection = document.getElementById("banned-ips-section");
-const bannedIpsBody = document.getElementById("banned-ips-body");
+const bannedIpsTableEl = document.getElementById("banned-ips-table");
 const bannedIpsEmpty = document.getElementById("banned-ips-empty");
-const clientsTable = document.getElementById("enrollment-table")?.closest(".bg-slate-900\\/50");
+const clientsTable = document.getElementById("clients-table-wrap");
 const addBanBtn = document.getElementById("add-ban-btn");
 const manualBanForm = document.getElementById("manual-ban-form");
 const banIpInput = document.getElementById("ban-ip-input");
@@ -44,6 +44,9 @@ const denyReasonModalBackdrop = document.getElementById("deny-reason-modal-backd
 let currentFilter = "pending";
 let searchQuery = "";
 let clients = [];
+let enrollmentTable = null;
+let bannedIpsTable = null;
+const selectedIds = new Set();
 const expandedCells = new Set(); // tracks "clientId:field" keys
 
 const SUSPICIOUS_FLAG_LABELS = {
@@ -100,9 +103,8 @@ async function loadStats() {
 }
 
 async function loadClients() {
-  loadingRow.classList.remove("hidden");
   emptyEl.classList.add("hidden");
-  body.querySelectorAll("tr:not(#enrollment-loading)").forEach((r) => r.remove());
+  if (enrollmentTable) enrollmentTable.replaceData([]);
 
   const fetchFilter = currentFilter === "suspicious" ? "all" : currentFilter;
   try {
@@ -134,44 +136,23 @@ async function loadClients() {
       })
     : base;
 
-  loadingRow.classList.add("hidden");
-
   const showBulkActions = (currentFilter === "pending" || currentFilter === "suspicious") &&
     filtered.some((c) => (c.enrollmentStatus || "pending") === "pending");
   approveAllBtn.classList.toggle("hidden", !showBulkActions);
   denyAllBtn.classList.toggle("hidden", !showBulkActions);
 
+  const visibleIds = new Set(filtered.map((c) => c.id));
+  for (const id of selectedIds) {
+    if (!visibleIds.has(id)) selectedIds.delete(id);
+  }
+
   if (filtered.length === 0) {
     emptyEl.classList.remove("hidden");
+    updateBulkButtons();
     return;
   }
 
-  for (const c of filtered) {
-    const tr = document.createElement("tr");
-    tr.className = "hover:bg-slate-800/40 transition-colors";
-    tr.dataset.id = c.id;
-
-    const statusPill = statusBadgeWithReason(c.enrollmentStatus || "pending", c.denyReason);
-    const fp = c.keyFingerprint ? c.keyFingerprint.substring(0, 16) + "..." : "-";
-    const lastSeen = c.lastSeen ? timeAgo(c.lastSeen) : "-";
-
-    tr.innerHTML = `
-      <td class="px-4 py-3"><input type="checkbox" class="row-check h-4 w-4 rounded border-slate-600" data-id="${esc(c.id)}" /></td>
-      <td class="px-4 py-3 text-sm font-medium text-slate-200">${esc(c.host || c.id)}${suspiciousBadges(c.suspiciousFlags)}</td>
-      <td class="px-4 py-3 text-sm text-slate-400">${esc(c.user || "-")}</td>
-      <td class="px-4 py-3 text-sm text-slate-400">${esc(c.os || "-")}</td>
-      <td class="px-4 py-3 text-sm text-slate-400">${expandableCell(c.id, "cpu", c.cpu)}</td>
-      <td class="px-4 py-3 text-sm text-slate-400">${c.gpu ? dedupeGpu(c.gpu) : esc("-")}</td>
-      <td class="px-4 py-3 text-sm text-slate-400">${esc(c.ram || "-")}</td>
-      <td class="px-4 py-3 text-sm text-slate-400">${esc(c.ip || "-")}</td>
-      <td class="px-4 py-3 text-sm text-slate-400">${esc(c.country || "-")}</td>
-      <td class="px-4 py-3 text-sm text-slate-500 font-mono">${esc(fp)}</td>
-      <td class="px-4 py-3 text-sm text-slate-500">${lastSeen}</td>
-      <td class="px-4 py-3">${statusPill}</td>
-      <td class="px-4 py-3"><div class="flex items-center justify-end gap-2 flex-nowrap">${actionButtons(c)}</div></td>
-    `;
-    body.appendChild(tr);
-  }
+  if (enrollmentTable) enrollmentTable.replaceData(filtered);
   updateBulkButtons();
 }
 
@@ -251,6 +232,129 @@ function expandableCell(clientId, field, value) {
     `</span>`;
 }
 
+function selectionHeaderFormatter() {
+  const rows = enrollmentTable?.getData() || [];
+  const allChecked = rows.length > 0 && rows.every((row) => selectedIds.has(row.id));
+  return `<input type="checkbox" class="enrollment-select-all h-4 w-4 rounded border-slate-600" ${allChecked ? "checked" : ""} />`;
+}
+
+function rowSelectionFormatter(cell) {
+  const id = cell.getRow().getData().id;
+  return `<input type="checkbox" class="row-check h-4 w-4 rounded border-slate-600" data-id="${esc(id)}" ${selectedIds.has(id) ? "checked" : ""} />`;
+}
+
+function initEnrollmentTable() {
+  if (!enrollmentTableEl) return;
+  enrollmentTable = new Tabulator(enrollmentTableEl, {
+    data: [],
+    height: "32rem",
+    layout: "fitDataStretch",
+    placeholder: "No clients in this category.",
+    index: "id",
+    virtualDom: true,
+    columns: [
+      {
+        title: "",
+        field: "id",
+        width: 54,
+        hozAlign: "center",
+        headerSort: false,
+        headerFormatter: selectionHeaderFormatter,
+        formatter: rowSelectionFormatter,
+      },
+      {
+        title: "Host",
+        field: "host",
+        width: 190,
+        formatter: (cell) => {
+          const c = cell.getRow().getData();
+          return `<span class="font-medium text-slate-200">${esc(c.host || c.id)}</span>${suspiciousBadges(c.suspiciousFlags)}`;
+        },
+      },
+      { title: "User", field: "user", width: 140, formatter: (cell) => esc(cell.getValue() || "-") },
+      { title: "OS", field: "os", width: 120, formatter: (cell) => esc(cell.getValue() || "-") },
+      {
+        title: "CPU",
+        field: "cpu",
+        width: 210,
+        formatter: (cell) => {
+          const c = cell.getRow().getData();
+          return expandableCell(c.id, "cpu", c.cpu);
+        },
+      },
+      {
+        title: "GPU",
+        field: "gpu",
+        width: 220,
+        formatter: (cell) => cell.getValue() ? dedupeGpu(cell.getValue()) : esc("-"),
+      },
+      { title: "RAM", field: "ram", width: 100, formatter: (cell) => esc(cell.getValue() || "-") },
+      { title: "IP", field: "ip", width: 140, formatter: (cell) => esc(cell.getValue() || "-") },
+      { title: "Country", field: "country", width: 120, formatter: (cell) => esc(cell.getValue() || "-") },
+      {
+        title: "Key Fingerprint",
+        field: "keyFingerprint",
+        width: 170,
+        formatter: (cell) => `<span class="font-mono text-slate-500">${esc(cell.getValue() ? cell.getValue().substring(0, 16) + "..." : "-")}</span>`,
+      },
+      {
+        title: "Last Seen",
+        field: "lastSeen",
+        width: 120,
+        sorter: "number",
+        formatter: (cell) => `<span class="text-slate-500">${cell.getValue() ? timeAgo(cell.getValue()) : "-"}</span>`,
+      },
+      {
+        title: "Status",
+        field: "enrollmentStatus",
+        width: 150,
+        formatter: (cell) => {
+          const c = cell.getRow().getData();
+          return statusBadgeWithReason(c.enrollmentStatus || "pending", c.denyReason);
+        },
+      },
+      {
+        title: "Actions",
+        field: "id",
+        width: 300,
+        headerSort: false,
+        hozAlign: "right",
+        formatter: (cell) => `<div class="flex items-center justify-end gap-2 flex-nowrap">${actionButtons(cell.getRow().getData())}</div>`,
+      },
+    ],
+  });
+}
+
+function initBannedIpsTable() {
+  if (!bannedIpsTableEl) return;
+  bannedIpsTable = new Tabulator(bannedIpsTableEl, {
+    data: [],
+    height: "24rem",
+    layout: "fitColumns",
+    placeholder: "No banned IPs.",
+    index: "ip",
+    columns: [
+      { title: "IP Address", field: "ip", width: 180, formatter: (cell) => `<span class="font-mono text-slate-200">${esc(cell.getValue())}</span>` },
+      { title: "Reason", field: "reason", formatter: (cell) => esc(cell.getValue() || "-") },
+      {
+        title: "Banned At",
+        field: "createdAt",
+        width: 150,
+        sorter: "number",
+        formatter: (cell) => `<span class="text-slate-500">${cell.getValue() ? timeAgo(cell.getValue()) : "-"}</span>`,
+      },
+      {
+        title: "Actions",
+        field: "ip",
+        width: 120,
+        headerSort: false,
+        hozAlign: "right",
+        formatter: (cell) => `<button class="act-unban px-2 py-1 rounded text-xs font-medium bg-slate-600 hover:bg-slate-700 text-white" data-ip="${esc(cell.getValue())}"><i class="fa-solid fa-unlock mr-1"></i>Unban</button>`,
+      },
+    ],
+  });
+}
+
 function timeAgo(ts) {
   const diff = Date.now() - ts;
   if (diff < 60000) return "just now";
@@ -297,21 +401,24 @@ async function bulkAction(action) {
   } catch (e) {
     if (window.showToast) window.showToast(`Failed: ${e.message}`, "error");
   }
-  selectAllEl.checked = false;
+  selectedIds.clear();
   await Promise.all([loadClients(), loadStats()]);
 }
 
 function getSelectedIds() {
-  return [...document.querySelectorAll(".row-check:checked")].map(
-    (el) => el.dataset.id,
-  );
+  return [...selectedIds];
 }
 
 function updateBulkButtons() {
-  const count = getSelectedIds().length;
+  const visibleIds = new Set((enrollmentTable?.getData() || []).map((row) => row.id));
+  for (const id of selectedIds) {
+    if (!visibleIds.has(id)) selectedIds.delete(id);
+  }
+  const count = selectedIds.size;
   bulkApproveBtn.classList.toggle("hidden", count === 0);
   bulkDenyBtn.classList.toggle("hidden", count === 0);
   bulkBanBtn.classList.toggle("hidden", count === 0);
+  enrollmentTable?.redraw(true);
 }
 
 // ── Tab switching ──────────────────────────────────────────────────
@@ -347,7 +454,7 @@ document.querySelectorAll(".enrollment-tab").forEach((tab) => {
 });
 
 // ── Table delegation ───────────────────────────────────────────────
-body.addEventListener("click", (e) => {
+enrollmentTableEl?.addEventListener("click", (e) => {
   // Expandable CPU/GPU cells
   const expander = e.target.closest(".hw-expand");
   if (expander) {
@@ -372,11 +479,24 @@ body.addEventListener("click", (e) => {
   else if (btn.classList.contains("act-ban-ip")) banClientIp(id);
 });
 
-body.addEventListener("change", () => updateBulkButtons());
-selectAllEl.addEventListener("change", () => {
-  document.querySelectorAll(".row-check").forEach((cb) => {
-    cb.checked = selectAllEl.checked;
-  });
+enrollmentTableEl?.addEventListener("change", (e) => {
+  const selectAll = e.target.closest(".enrollment-select-all");
+  if (selectAll) {
+    const rows = enrollmentTable?.getData() || [];
+    for (const row of rows) {
+      if (selectAll.checked) selectedIds.add(row.id);
+      else selectedIds.delete(row.id);
+    }
+    updateBulkButtons();
+    return;
+  }
+
+  const checkbox = e.target.closest(".row-check");
+  if (!checkbox) return;
+  const id = checkbox.dataset.id;
+  if (!id) return;
+  if (checkbox.checked) selectedIds.add(id);
+  else selectedIds.delete(id);
   updateBulkButtons();
 });
 
@@ -455,8 +575,8 @@ async function banClientIp(clientId) {
 }
 
 async function loadBannedIps() {
-  bannedIpsBody.innerHTML = "";
   bannedIpsEmpty.classList.add("hidden");
+  if (bannedIpsTable) bannedIpsTable.replaceData([]);
 
   try {
     const data = await api("/api/enrollment/banned-ips");
@@ -467,27 +587,13 @@ async function loadBannedIps() {
       return;
     }
 
-    for (const entry of items) {
-      const tr = document.createElement("tr");
-      tr.className = "hover:bg-slate-800/40 transition-colors";
-      tr.innerHTML = `
-        <td class="px-4 py-3 text-sm font-mono text-slate-200">${esc(entry.ip)}</td>
-        <td class="px-4 py-3 text-sm text-slate-400">${esc(entry.reason || "-")}</td>
-        <td class="px-4 py-3 text-sm text-slate-500">${entry.createdAt ? timeAgo(entry.createdAt) : "-"}</td>
-        <td class="px-4 py-3 text-right">
-          <button class="act-unban px-2 py-1 rounded text-xs font-medium bg-slate-600 hover:bg-slate-700 text-white" data-ip="${esc(entry.ip)}">
-            <i class="fa-solid fa-unlock mr-1"></i>Unban
-          </button>
-        </td>
-      `;
-      bannedIpsBody.appendChild(tr);
-    }
+    if (bannedIpsTable) bannedIpsTable.replaceData(items);
   } catch {
     bannedIpsEmpty.classList.remove("hidden");
   }
 }
 
-bannedIpsBody.addEventListener("click", async (e) => {
+bannedIpsTableEl?.addEventListener("click", async (e) => {
   const btn = e.target.closest("button");
   if (!btn) return;
   if (btn.classList.contains("act-unban")) {
@@ -667,6 +773,8 @@ denyReasonModalConfirm.addEventListener("click", async () => {
 });
 
 // ── Init ───────────────────────────────────────────────────────────
+initEnrollmentTable();
+initBannedIpsTable();
 loadSettings();
 loadStats();
 loadClients();
