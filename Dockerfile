@@ -111,6 +111,7 @@ RUN if [ -f dist-clients/BackstageCapture.x64.dll ]; then \
 
 # Tailwind CSS, vendored frontend assets, and bundled Bun server runtime.
 RUN bun run build \
+    && bun run minify \
     && test -s ./public/assets/tailwind.css \
     && test -d ./public/vendor/fontawesome \
     && test -s ./dist/index.js \

@@ -33,6 +33,7 @@ const htmlOpts = {
 
 type Stats = { js: number; css: number; html: number; savedBytes: number };
 const stats: Stats = { js: 0, css: 0, html: 0, savedBytes: 0 };
+let failures = 0;
 
 async function collectFiles(dir: string, exts: Set<string>): Promise<string[]> {
   const results: string[] = [];
@@ -94,11 +95,25 @@ console.log(`Minifying ${jsFiles.length} JS, ${cssFiles.length} CSS, ${htmlFiles
 
 // Process in parallel batches
 await Promise.all([
-  ...jsFiles.map((f) => minifyJS(f).catch((e) => console.error(`JS error ${f}: ${e.message}`))),
-  ...cssFiles.map((f) => minifyCSS(f).catch((e) => console.error(`CSS error ${f}: ${e.message}`))),
-  ...htmlFiles.map((f) => minifyHTML(f).catch((e) => console.error(`HTML error ${f}: ${e.message}`))),
+  ...jsFiles.map((f) => minifyJS(f).catch((e) => {
+    failures++;
+    console.error(`JS error ${f}: ${e.message}`);
+  })),
+  ...cssFiles.map((f) => minifyCSS(f).catch((e) => {
+    failures++;
+    console.error(`CSS error ${f}: ${e.message}`);
+  })),
+  ...htmlFiles.map((f) => minifyHTML(f).catch((e) => {
+    failures++;
+    console.error(`HTML error ${f}: ${e.message}`);
+  })),
 ]);
 
 console.log(
   `Done: ${stats.js} JS, ${stats.css} CSS, ${stats.html} HTML — saved ${(stats.savedBytes / 1024).toFixed(1)} KB`,
 );
+
+if (failures > 0) {
+  console.error(`Minification failed for ${failures} file(s).`);
+  process.exit(1);
+}

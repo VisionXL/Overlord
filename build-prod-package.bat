@@ -27,11 +27,9 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo [1/10] Building server bundle...
+echo [1/10] Building server bundle and web assets...
 pushd "%SERVER_SRC%"
 call bun install
-if errorlevel 1 goto :err
-call bun run build:css
 if errorlevel 1 goto :err
 call bun run build
 if errorlevel 1 goto :err

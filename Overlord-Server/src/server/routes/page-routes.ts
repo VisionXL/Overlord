@@ -1,5 +1,6 @@
 import { authenticateRequest } from "../../auth";
 import { getConfig } from "../../config";
+import { consumeLoginPageRateLimit } from "../../rateLimit";
 import { requirePermission, type Permission } from "../../rbac";
 import { canUserAccessClient, getUserById, type UserRole } from "../../users";
 
@@ -7,9 +8,24 @@ type PageRouteDeps = {
   PUBLIC_ROOT: string;
   secureHeaders: (contentType?: string) => Record<string, string>;
   mimeType: (path: string) => string;
+  requestIP?: (req: Request) => { address?: string } | null | undefined;
 };
 
-async function serveLoginOrUnauthorized(deps: PageRouteDeps): Promise<Response> {
+function tooManyRequestsResponse(retryAfter = 60): Response {
+  return new Response("Too many requests", {
+    status: 429,
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Retry-After": String(retryAfter),
+    },
+  });
+}
+
+async function serveLoginOrUnauthorized(req: Request, deps: PageRouteDeps): Promise<Response> {
+  const ip = deps.requestIP?.(req)?.address || "unknown";
+  const limited = consumeLoginPageRateLimit(ip);
+  if (limited.limited) return tooManyRequestsResponse(limited.retryAfter);
+
   const loginFile = Bun.file(`${deps.PUBLIC_ROOT}/login.html`);
   if (await loginFile.exists()) {
     return new Response(loginFile, { headers: deps.secureHeaders(deps.mimeType("/login.html")) });
@@ -143,8 +159,17 @@ export async function handlePageRoutes(
     const filePath = authed ? "/index.html" : "/login.html";
     const file = Bun.file(`${deps.PUBLIC_ROOT}${filePath}`);
     if (await file.exists()) {
+      if (!authed) {
+        const limited = consumeLoginPageRateLimit(deps.requestIP?.(req)?.address || "unknown");
+        if (limited.limited) return tooManyRequestsResponse(limited.retryAfter);
+      }
       return new Response(file, { headers: deps.secureHeaders(deps.mimeType(filePath)) });
     }
+  }
+
+  // ---- Explicit login page ----
+  if (url.pathname === "/login.html") {
+    return serveLoginOrUnauthorized(req, deps);
   }
 
   // ---- Change password (always accessible) ----
@@ -162,7 +187,7 @@ export async function handlePageRoutes(
     if (url.pathname !== page.path) continue;
 
     const user = await authenticateRequest(req);
-    if (!user) return serveLoginOrUnauthorized(deps);
+    if (!user) return serveLoginOrUnauthorized(req, deps);
 
     if (page.path === "/screenshots" && !getConfig().thumbnails.wallEnabled) {
       return new Response("Screenshot wall is disabled by the administrator", { status: 403 });
@@ -193,7 +218,7 @@ export async function handlePageRoutes(
     if (url.pathname !== page.path) continue;
 
     const user = await authenticateRequest(req);
-    if (!user) return serveLoginOrUnauthorized(deps);
+    if (!user) return serveLoginOrUnauthorized(req, deps);
 
     const maybeChange = await serveChangePasswordIfRequired(deps, user.userId);
     if (maybeChange) return maybeChange;
@@ -216,7 +241,7 @@ export async function handlePageRoutes(
     if (!match) continue;
 
     const user = await authenticateRequest(req);
-    if (!user) return serveLoginOrUnauthorized(deps);
+    if (!user) return serveLoginOrUnauthorized(req, deps);
 
     if (user.role === "viewer") {
       return new Response("Forbidden: Viewers cannot access interactive features", { status: 403 });

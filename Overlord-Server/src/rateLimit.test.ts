@@ -1,6 +1,17 @@
-import { describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { getConfig } from "./config";
-import { isRateLimited, recordFailedAttempt, recordSuccessfulAttempt } from "./rateLimit";
+import {
+  clearRequestRateLimitsForTests,
+  consumeLoginPageRateLimit,
+  consumeUnauthorizedRateLimit,
+  isRateLimited,
+  recordFailedAttempt,
+  recordSuccessfulAttempt,
+} from "./rateLimit";
+
+beforeEach(() => {
+  clearRequestRateLimitsForTests();
+});
 
 describe("rateLimit", () => {
   test("locks out after repeated failures", () => {
@@ -25,5 +36,27 @@ describe("rateLimit", () => {
 
     recordSuccessfulAttempt(ip);
     expect(isRateLimited(ip).limited).toBe(false);
+  });
+
+  test("limits repeated login page requests by IP", () => {
+    const ip = `10.0.2.${Date.now()}`;
+    for (let i = 0; i < 60; i += 1) {
+      expect(consumeLoginPageRateLimit(ip).limited).toBe(false);
+    }
+
+    const result = consumeLoginPageRateLimit(ip);
+    expect(result.limited).toBe(true);
+    expect(result.retryAfter).toBeGreaterThan(0);
+  });
+
+  test("limits repeated unauthorized responses by IP", () => {
+    const ip = `10.0.3.${Date.now()}`;
+    for (let i = 0; i < 120; i += 1) {
+      expect(consumeUnauthorizedRateLimit(ip).limited).toBe(false);
+    }
+
+    const result = consumeUnauthorizedRateLimit(ip);
+    expect(result.limited).toBe(true);
+    expect(result.retryAfter).toBeGreaterThan(0);
   });
 });

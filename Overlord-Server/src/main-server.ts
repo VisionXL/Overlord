@@ -680,7 +680,10 @@ async function startServer() {
           requestIP: (srv as any).requestIP,
         }),
         (req, url) => handleAssetsRoutes(req, url, routeDeps.assets),
-        (req, url) => handlePageRoutes(req, url, routeDeps.page),
+        (req, url, srv) => handlePageRoutes(req, url, {
+          ...routeDeps.page,
+          requestIP: (srv as any).requestIP,
+        }),
         (req, url) => handleWebrtcRoutes(req, url),
         (req, url, srv) => handleClientRoutes(req, url, srv as any, routeDeps.client),
         (req, url, srv) => handleWsUpgradeRoutes(req, url, srv as any, routeDeps.wsUpgrade),
