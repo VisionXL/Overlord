@@ -199,6 +199,14 @@ copyFile(
   path.join(VENDOR, "gridstack", "gridstack.min.css"),
 );
 
+/* ── Cytoscape.js ────────────────────────────────────────────────── */
+
+console.log("Copying Cytoscape.js ...");
+copyFile(
+  path.join(NM, "cytoscape", "dist", "cytoscape.min.js"),
+  path.join(VENDOR, "cytoscape", "cytoscape.min.js"),
+);
+
 /* ── highlight.js (bundle core + languages) ──────────────────────── */
 
 console.log("Bundling highlight.js ...");

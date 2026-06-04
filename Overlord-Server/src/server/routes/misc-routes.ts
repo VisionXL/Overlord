@@ -2,12 +2,13 @@ import { authenticateRequest } from "../../auth";
 import { AuditAction, getAuditLogs, logAudit } from "../../auditLog";
 import { logger } from "../../logger";
 import { getConfig, updateSecurityConfig, updateTlsConfig, updateAppearanceConfig, updateChatConfig, getExportableConfig, importFullConfig, updateRegistrationConfig, updateBuildRateLimitConfig, updateThumbnailsConfig } from "../../config";
-import { getClientMetricsSummary, getClientMetricsSummaryForUser, getDatabaseFileSizeBytes } from "../../db";
+import { getClientMetricsSummary, getClientMetricsSummaryForUser, getDatabaseFileSizeBytes, listClients } from "../../db";
 import { getThumbnailStats } from "../../thumbnails";
 import { getClientCount, getOnlineClients } from "../../clientManager";
 import { metrics } from "../../metrics";
 import { requirePermission } from "../../rbac";
 import { getUserTelegramChatId, setUserTelegramChatId, getUserClientAccessScope, listUserClientRuleIdsByAccess, canUserAccessClient, getUserById } from "../../users";
+import { buildClientGraph } from "../client-graph";
 import { runCertbotSetup } from "../certbot-setup";
 import {
   getActiveProxies,
@@ -334,6 +335,48 @@ export async function handleMiscRoutes(
     return new Response(JSON.stringify({ snapshot, history }), {
       headers: { "Content-Type": "application/json" },
     });
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/client-graph") {
+    const user = await authenticateRequest(req);
+    if (!user) return new Response("Unauthorized", { status: 401 });
+
+    const limit = Math.max(25, Math.min(500, Number(url.searchParams.get("limit") || 300)));
+    const search = (url.searchParams.get("q") || "").trim().toLowerCase();
+    const statusFilter = url.searchParams.get("status") || "all";
+    const groupFilter = url.searchParams.get("group") || "all";
+    let allowedClientIds: string[] | undefined;
+    let deniedClientIds: string[] | undefined;
+
+    if (user.role !== "admin") {
+      const scope = getUserClientAccessScope(user.userId);
+      if (scope === "none") {
+        return Response.json(buildClientGraph([]), { headers: deps.CORS_HEADERS });
+      }
+      if (scope === "allowlist") {
+        allowedClientIds = listUserClientRuleIdsByAccess(user.userId, "allow");
+      } else if (scope === "denylist") {
+        deniedClientIds = listUserClientRuleIdsByAccess(user.userId, "deny");
+      }
+    }
+
+    const clients = listClients({
+      page: 1,
+      pageSize: limit,
+      search,
+      sort: "last_seen_desc",
+      statusFilter,
+      osFilter: "all",
+      countryFilter: "all",
+      enrollmentFilter: "approved",
+      groupFilter,
+      allowedClientIds,
+      deniedClientIds,
+    });
+
+    const graph = buildClientGraph(clients.items);
+    graph.summary.totalClients = clients.total;
+    return Response.json(graph, { headers: deps.CORS_HEADERS });
   }
 
   if (url.pathname === "/health") {

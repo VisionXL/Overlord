@@ -63,6 +63,7 @@ export const NAV_GROUPS = [
     iconColor: "text-emerald-400",
     children: [
       { href: "/metrics",       label: "Metrics",        icon: "fa-chart-line",      iconColor: "text-emerald-400", linkId: "metrics-link" },
+      { href: "/graph",         label: "Graph",          icon: "fa-diagram-project", iconColor: "text-cyan-400",    linkId: "graph-link" },
       { href: "/screenshots",   label: "Screenshot Wall", icon: "fa-images",         iconColor: "text-sky-400",     linkId: "screenshots-link",   hidden: true },
     ],
   },

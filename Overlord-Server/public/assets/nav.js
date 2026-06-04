@@ -36,6 +36,7 @@ if (host) {
   const activeMap = {
     "/": "nav-clients",
     "/metrics": "metrics-link",
+    "/graph": "graph-link",
     "/screenshots": "screenshots-link",
     "/logs": "logs-link",
     "/scripts": "scripts-link",
