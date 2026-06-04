@@ -4466,11 +4466,56 @@ body.sb-ready #top-nav {
   border-color: rgba(71, 85, 105, 0.8);
 }
 
-.dashboard-stats-content {
+.dashboard-card-menu {
+  position: relative;
+}
+
+.dashboard-card-menu > summary {
+  list-style: none;
+}
+
+.dashboard-card-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.dashboard-card-menu-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 45;
   display: grid;
-  grid-template-columns: minmax(150px, 0.85fr) minmax(150px, 0.85fr) minmax(260px, 1.45fr) minmax(260px, 1.35fr) minmax(220px, 1fr);
-  gap: 12px;
-  align-items: stretch;
+  gap: 6px;
+  width: 196px;
+  padding: 10px;
+  border: 1px solid rgba(51, 65, 85, 0.82);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.98);
+  box-shadow: 0 18px 38px rgba(2, 6, 23, 0.42);
+}
+
+.dashboard-card-menu-panel label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 7px;
+  border-radius: 6px;
+  color: #cbd5e1;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dashboard-card-menu-panel label:hover {
+  background: rgba(51, 65, 85, 0.62);
+}
+
+.dashboard-card-menu-panel input {
+  accent-color: #38bdf8;
+}
+
+.dashboard-stats-content {
+  min-height: calc(var(--dashboard-stats-height) + 12px);
 }
 
 .dashboard-stats-shell.is-collapsed .dashboard-stats-content,
@@ -4513,6 +4558,7 @@ body.sb-ready #top-nav {
 .dashboard-health-card {
   position: relative;
   min-width: 0;
+  height: 100%;
   border: 1px solid rgba(51, 65, 85, 0.68);
   border-radius: 10px;
   background: rgba(15, 23, 42, 0.72);
@@ -4540,11 +4586,44 @@ body.sb-ready #top-nav {
   border-color: rgba(56, 189, 248, 0.62);
 }
 
+.dashboard-stats-content .grid-stack-item-content {
+  overflow: hidden !important;
+}
+
+.dashboard-stats-content .grid-stack-item.dashboard-card-hidden {
+  display: none;
+}
+
+.dashboard-stats-content .grid-stack-item.ui-draggable-dragging .grid-stack-item-content,
+.dashboard-stats-content .grid-stack-item.ui-resizable-resizing .grid-stack-item-content {
+  border-color: rgba(56, 189, 248, 0.62);
+  box-shadow: 0 18px 42px rgba(2, 6, 23, 0.42);
+}
+
+.dashboard-stats-content .grid-stack-placeholder > .placeholder-content,
+.dashboard-stats-content .grid-stack-placeholder > .grid-stack-item-content {
+  border: 1px dashed rgba(56, 189, 248, 0.58);
+  border-radius: 10px;
+  background: rgba(8, 47, 73, 0.22);
+}
+
+.dashboard-stats-content .ui-resizable-se {
+  right: 8px !important;
+  bottom: 8px !important;
+  width: 14px;
+  height: 14px;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.dashboard-stats-content .grid-stack-item:hover .ui-resizable-se {
+  opacity: 0.72;
+}
+
 .dashboard-stat-card {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  height: var(--dashboard-stats-height);
   padding: 14px;
 }
 
@@ -4603,7 +4682,6 @@ body.sb-ready #top-nav {
 
 .dashboard-chart-card,
 .dashboard-health-card {
-  height: var(--dashboard-stats-height);
   padding: 12px 14px 10px;
 }
 
@@ -4651,6 +4729,12 @@ body.sb-ready #top-nav {
 .dashboard-chart-wrap--donut {
   height: max(54px, calc(var(--dashboard-stats-height) - 62px));
   padding-bottom: 8px;
+}
+
+.dashboard-chart-wrap canvas {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
 }
 
 .dashboard-health-list {
@@ -4741,37 +4825,7 @@ body.sb-ready #top-nav {
   box-shadow: 0 0 0 4px rgba(100, 116, 139, 0.1);
 }
 
-@media (max-width: 1380px) {
-  .dashboard-stats-content {
-    grid-template-columns: repeat(2, minmax(150px, 1fr)) repeat(2, minmax(260px, 1.35fr));
-  }
-
-  .dashboard-health-card {
-    grid-column: span 2;
-  }
-}
-
-@media (max-width: 940px) {
-  .dashboard-stats-content {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .dashboard-chart-card,
-  .dashboard-health-card {
-    grid-column: span 2;
-  }
-}
-
 @media (max-width: 620px) {
-  .dashboard-stats-content {
-    grid-template-columns: 1fr;
-  }
-
-  .dashboard-chart-card,
-  .dashboard-health-card {
-    grid-column: auto;
-  }
-
   .dashboard-stat-value {
     font-size: clamp(1.65rem, calc(var(--dashboard-stats-height) / 3.4), 3rem);
   }

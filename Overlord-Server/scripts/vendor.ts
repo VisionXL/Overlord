@@ -186,6 +186,19 @@ copyFile(
   path.join(VENDOR, "tabulator", "tabulator_midnight.min.css"),
 );
 
+/* ── GridStack ───────────────────────────────────────────────────── */
+
+console.log("Copying GridStack ...");
+const gridstackRoot = path.join(NM, "gridstack", "dist");
+copyFile(
+  path.join(gridstackRoot, "gridstack-all.js"),
+  path.join(VENDOR, "gridstack", "gridstack-all.js"),
+);
+copyFile(
+  path.join(gridstackRoot, "gridstack.min.css"),
+  path.join(VENDOR, "gridstack", "gridstack.min.css"),
+);
+
 /* ── highlight.js (bundle core + languages) ──────────────────────── */
 
 console.log("Bundling highlight.js ...");

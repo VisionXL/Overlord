@@ -5,12 +5,22 @@ let osChart = null;
 const STATS_COLLAPSED_KEY = "overlord_dashboard_stats_collapsed";
 const STATS_HEIGHT_KEY = "overlord_dashboard_stats_height";
 const STATS_ORDER_KEY = "overlord_dashboard_stats_order";
+const STATS_LAYOUT_KEY = "overlord_dashboard_stats_gridstack_layout";
+const STATS_HIDDEN_KEY = "overlord_dashboard_stats_hidden";
 const PULSE_ORDER_KEY = "overlord_dashboard_pulse_order";
 const DEFAULT_STATS_HEIGHT = 142;
 const MIN_STATS_HEIGHT = 112;
 const MAX_STATS_HEIGHT = 280;
 const DEFAULT_CARD_ORDER = ["online", "sessions", "trend", "fleet", "pulse"];
 const DEFAULT_PULSE_ORDER = ["api", "memory", "ping"];
+const DEFAULT_GRID_LAYOUT = {
+  online: { x: 0, y: 0, w: 2, h: 2 },
+  sessions: { x: 2, y: 0, w: 2, h: 2 },
+  trend: { x: 4, y: 0, w: 3, h: 2 },
+  fleet: { x: 7, y: 0, w: 3, h: 2 },
+  pulse: { x: 10, y: 0, w: 2, h: 2 },
+};
+let statsGrid = null;
 
 const palette = {
   text: "#cbd5e1",
@@ -291,6 +301,239 @@ function applyHeightMode(height) {
   }
 }
 
+function getStatsCellHeight() {
+  return Math.max(48, Math.round(getSavedHeight() / 2));
+}
+
+function resizeCharts() {
+  requestAnimationFrame(() => {
+    onlineChart?.resize();
+    osChart?.resize();
+  });
+}
+
+function syncStatsWidgetHeights() {
+  if (!statsGrid?.engine?.nodes) return;
+  const cellHeight = Number(statsGrid.opts?.cellHeight) || getStatsCellHeight();
+  for (const node of statsGrid.engine.nodes) {
+    const content = node.el?.querySelector?.(".grid-stack-item-content");
+    if (!content) continue;
+    const estimated = Math.max(64, (Number(node.h) || 2) * cellHeight - 12);
+    content.style.setProperty("--dashboard-stats-height", `${estimated}px`);
+  }
+}
+
+function readSavedGridLayout() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STATS_LAYOUT_KEY) || "[]");
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item) => DEFAULT_CARD_ORDER.includes(item?.id))
+      .map((item) => ({
+        id: item.id,
+        x: Math.max(0, Number(item.x) || 0),
+        y: Math.max(0, Number(item.y) || 0),
+        w: Math.max(1, Number(item.w) || DEFAULT_GRID_LAYOUT[item.id]?.w || 2),
+        h: Math.max(1, Number(item.h) || DEFAULT_GRID_LAYOUT[item.id]?.h || 2),
+      }));
+  } catch {
+    return [];
+  }
+}
+
+function readHiddenStatsCards() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STATS_HIDDEN_KEY) || "[]");
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((id) => DEFAULT_CARD_ORDER.includes(id));
+  } catch {
+    return [];
+  }
+}
+
+function saveHiddenStatsCards(hidden) {
+  const cleaned = Array.from(hidden).filter((id) => DEFAULT_CARD_ORDER.includes(id));
+  localStorage.setItem(STATS_HIDDEN_KEY, JSON.stringify(cleaned));
+}
+
+function isStatsGridManaged(el) {
+  return !!statsGrid?.engine?.nodes?.some((node) => node.el === el);
+}
+
+function saveStatsGridLayout() {
+  if (!statsGrid?.engine?.nodes) return;
+  const layoutMap = new Map(
+    DEFAULT_CARD_ORDER.map((id) => [id, { id, ...DEFAULT_GRID_LAYOUT[id] }]),
+  );
+
+  for (const item of readSavedGridLayout()) {
+    layoutMap.set(item.id, item);
+  }
+
+  for (const node of statsGrid.engine.nodes) {
+    const id = node.el?.dataset?.dashboardCard || node.id;
+    if (!DEFAULT_CARD_ORDER.includes(id)) continue;
+    layoutMap.set(id, { id, x: node.x, y: node.y, w: node.w, h: node.h });
+  }
+
+  const layout = DEFAULT_CARD_ORDER.map((id) => layoutMap.get(id));
+  localStorage.setItem(STATS_LAYOUT_KEY, JSON.stringify(layout));
+}
+
+function applyGridLayout(layout) {
+  if (!statsGrid) return;
+  statsGrid.batchUpdate();
+  for (const item of layout) {
+    const el = document.querySelector(`[data-dashboard-card="${item.id}"]`);
+    if (el) statsGrid.update(el, { x: item.x, y: item.y, w: item.w, h: item.h });
+  }
+  statsGrid.batchUpdate(false);
+  syncStatsWidgetHeights();
+  resizeCharts();
+}
+
+function setStatsCardHidden(id, hidden, persist = true) {
+  if (!DEFAULT_CARD_ORDER.includes(id)) return;
+  const el = document.querySelector(`[data-dashboard-card="${id}"]`);
+  if (!el) return;
+
+  if (hidden) {
+    if (statsGrid && isStatsGridManaged(el)) statsGrid.removeWidget(el, false);
+    el.classList.add("dashboard-card-hidden");
+  } else {
+    el.classList.remove("dashboard-card-hidden");
+    if (statsGrid && !isStatsGridManaged(el)) {
+      statsGrid.makeWidget(el);
+      const layout = readSavedGridLayout().find((item) => item.id === id);
+      statsGrid.update(el, { ...(layout || DEFAULT_GRID_LAYOUT[id]) });
+    }
+  }
+
+  if (persist) {
+    const nextHidden = new Set(readHiddenStatsCards());
+    if (hidden) nextHidden.add(id);
+    else nextHidden.delete(id);
+    saveHiddenStatsCards(nextHidden);
+    saveStatsGridLayout();
+  }
+
+  syncStatsWidgetHeights();
+  resizeCharts();
+}
+
+function applyHiddenStatsCards() {
+  const hidden = new Set(readHiddenStatsCards());
+  for (const id of DEFAULT_CARD_ORDER) {
+    setStatsCardHidden(id, hidden.has(id), false);
+  }
+}
+
+function syncStatsCardMenu() {
+  const panel = $("dashboard-card-menu-panel");
+  if (!panel) return;
+  const hidden = new Set(readHiddenStatsCards());
+  panel.querySelectorAll("[data-dashboard-card-toggle]").forEach((input) => {
+    const id = input.dataset.dashboardCardToggle;
+    input.checked = !hidden.has(id);
+  });
+}
+
+function initStatsCardMenu() {
+  const menu = $("dashboard-card-menu");
+  const panel = $("dashboard-card-menu-panel");
+  if (!panel || panel.dataset.bound === "true") return;
+
+  panel.dataset.bound = "true";
+  syncStatsCardMenu();
+  panel.querySelectorAll("[data-dashboard-card-toggle]").forEach((input) => {
+    input.addEventListener("change", () => {
+      setStatsCardHidden(input.dataset.dashboardCardToggle, !input.checked);
+    });
+  });
+
+  menu?.addEventListener("toggle", () => {
+    if (menu.open) syncStatsCardMenu();
+  });
+}
+
+function applySavedGridLayout() {
+  const saved = readSavedGridLayout();
+  if (saved.length) {
+    applyGridLayout(saved);
+    return;
+  }
+
+  // Preserve older drag-only ordering by converting it into default-size widgets.
+  const order = readSavedOrder();
+  if (!order.length || order.join("|") === DEFAULT_CARD_ORDER.join("|")) return;
+  const migrated = order.map((id, index) => ({
+    id,
+    ...(DEFAULT_GRID_LAYOUT[id] || { w: 2, h: 2 }),
+    x: index === 0 ? 0 : undefined,
+    y: index === 0 ? 0 : undefined,
+  }));
+  let x = 0;
+  for (const item of migrated) {
+    const width = item.w || 2;
+    if (x + width > 12) x = 0;
+    item.x = x;
+    item.y = 0;
+    x += width;
+  }
+  applyGridLayout(migrated);
+}
+
+function resetStatsGridLayout() {
+  localStorage.removeItem(STATS_LAYOUT_KEY);
+  localStorage.removeItem(STATS_HIDDEN_KEY);
+  for (const id of DEFAULT_CARD_ORDER) {
+    setStatsCardHidden(id, false, false);
+  }
+  syncStatsCardMenu();
+  if (!statsGrid) {
+    const content = $("dashboard-stats-content");
+    if (content) applySavedOrder(content);
+    return;
+  }
+  applyGridLayout(DEFAULT_CARD_ORDER.map((id) => ({ id, ...DEFAULT_GRID_LAYOUT[id] })));
+}
+
+function initStatsGrid(content) {
+  if (!content || content.dataset.gridstackBound === "true") return;
+  const api = window.GridStack?.GridStack || window.GridStack;
+  if (typeof api?.init !== "function") {
+    applySavedOrder(content);
+    applyHiddenStatsCards();
+    return;
+  }
+
+  content.dataset.gridstackBound = "true";
+  statsGrid = api.init({
+    column: 12,
+    cellHeight: getStatsCellHeight(),
+    margin: 6,
+    animate: true,
+    float: false,
+    handle: ".grid-stack-item-content",
+    draggable: {
+      handle: ".grid-stack-item-content",
+      appendTo: "body",
+      scroll: true,
+    },
+    resizable: { handles: "se" },
+  }, content);
+
+  applySavedGridLayout();
+  applyHiddenStatsCards();
+  statsGrid.on("change dragstop resizestop", () => {
+    syncStatsWidgetHeights();
+    saveStatsGridLayout();
+    resizeCharts();
+  });
+  syncStatsWidgetHeights();
+  resizeCharts();
+}
+
 function updateOnlineChart(history, snapshot) {
   if (!onlineChart) return;
   const rows = aggregateOnlineHistory(history, snapshot);
@@ -403,18 +646,15 @@ function initStatsToggle() {
   const resizer = $("dashboard-stats-resizer");
   if (!shell || !button) return;
 
-  const resizeCharts = () => {
-    requestAnimationFrame(() => {
-      onlineChart?.resize();
-      osChart?.resize();
-    });
-  };
-
   const setHeight = (value, persist = true) => {
     const height = normalizeHeight(value);
     shell.style.setProperty("--dashboard-stats-height", `${height}px`);
     resizer?.setAttribute("aria-valuenow", String(height));
     if (persist) localStorage.setItem(STATS_HEIGHT_KEY, String(height));
+    if (statsGrid) {
+      statsGrid.cellHeight(getStatsCellHeight());
+      syncStatsWidgetHeights();
+    }
     applyHeightMode(height);
     resizeCharts();
   };
@@ -429,7 +669,8 @@ function initStatsToggle() {
     localStorage.setItem(STATS_COLLAPSED_KEY, collapsed ? "true" : "false");
   };
 
-  initCardReorder();
+  initStatsGrid($("dashboard-stats-content"));
+  initStatsCardMenu();
   initPulseReorder();
   setHeight(getSavedHeight(), false);
   setCollapsed(localStorage.getItem(STATS_COLLAPSED_KEY) === "true");
@@ -483,10 +724,9 @@ function initStatsToggle() {
   resetButton?.addEventListener("click", () => {
     setHeight(DEFAULT_STATS_HEIGHT);
     setCollapsed(false);
+    resetStatsGridLayout();
     localStorage.removeItem(STATS_ORDER_KEY);
     localStorage.removeItem(PULSE_ORDER_KEY);
-    const content = $("dashboard-stats-content");
-    if (content) applySavedOrder(content);
     const pulseList = document.querySelector(".dashboard-health-list");
     if (pulseList) applyPulseOrder(pulseList);
   });

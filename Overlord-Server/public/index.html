@@ -12,11 +12,13 @@
 <link rel="stylesheet" href="/assets/tailwind.css" />
     <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css" />
     <link rel="stylesheet" href="/vendor/flag-icons/css/flag-icons.min.css" />
+    <link rel="stylesheet" href="/vendor/gridstack/gridstack.min.css" />
     <link rel="icon" type="image/x-icon" href="/assets/favicon.ico" />
     <link rel="stylesheet" href="/assets/main.css" />
     <link rel="stylesheet" href="/assets/custom.css" />
     <script defer src="/vendor/animejs/anime.min.js"></script>
     <script defer src="/vendor/chart.js/chart.umd.js"></script>
+    <script defer src="/vendor/gridstack/gridstack-all.js"></script>
     <link rel="preload" href="/api/clients?page=1&amp;pageSize=12&amp;q=&amp;sort=stable&amp;status=all&amp;os=all&amp;country=all&amp;group=all" as="fetch" crossorigin="use-credentials" />
     <link rel="preload" href="/api/auth/me" as="fetch" crossorigin="use-credentials" />
     <link rel="preload" href="/api/groups" as="fetch" crossorigin="use-credentials" />
@@ -34,6 +36,18 @@
               <span id="server-version-text" class="dashboard-version-text">Server version: loading...</span>
             </div>
             <div class="dashboard-stats-controls" aria-label="Status overview controls">
+              <details id="dashboard-card-menu" class="dashboard-card-menu">
+                <summary class="dashboard-stats-toggle" title="Dashboard cards" aria-label="Dashboard cards">
+                  <i class="fa-solid fa-table-cells-large"></i>
+                </summary>
+                <div id="dashboard-card-menu-panel" class="dashboard-card-menu-panel">
+                  <label><input type="checkbox" data-dashboard-card-toggle="online" checked /> Online</label>
+                  <label><input type="checkbox" data-dashboard-card-toggle="sessions" checked /> Sessions</label>
+                  <label><input type="checkbox" data-dashboard-card-toggle="trend" checked /> Clients Online</label>
+                  <label><input type="checkbox" data-dashboard-card-toggle="fleet" checked /> Operating Systems</label>
+                  <label><input type="checkbox" data-dashboard-card-toggle="pulse" checked /> Server Pulse</label>
+                </div>
+              </details>
               <button id="dashboard-stats-reset" class="dashboard-stats-toggle" type="button" title="Reset status overview">
                 <i class="fa-solid fa-arrow-rotate-left"></i>
               </button>
@@ -42,79 +56,89 @@
               </button>
             </div>
           </div>
-          <div id="dashboard-stats-content" class="dashboard-stats-content">
-          <div class="dashboard-stat-card dashboard-stat-card--online" data-dashboard-card="online" draggable="true">
-            <div class="dashboard-stat-topline">
-              <span class="dashboard-live-dot is-live"></span>
-              <span>Online</span>
-            </div>
-            <div id="dash-online-count" class="dashboard-stat-value">0</div>
-            <div class="dashboard-stat-subline">
-              <span id="dash-total-count">0 total</span>
-              <span id="dash-online-ratio">0%</span>
-            </div>
-          </div>
-          <div class="dashboard-stat-card dashboard-stat-card--sessions" data-dashboard-card="sessions" draggable="true">
-            <div class="dashboard-stat-topline">
-              <i class="fa-solid fa-wave-square"></i>
-              <span>Sessions</span>
-            </div>
-            <div id="dash-session-count" class="dashboard-stat-value">0</div>
-            <div class="dashboard-stat-subline">
-              <span id="dash-command-minute">0 cmd/min</span>
-              <span id="dash-http-errors">0 errors</span>
-            </div>
-          </div>
-          <div class="dashboard-chart-card" data-dashboard-card="trend" draggable="true">
-            <div class="dashboard-chart-head">
-              <div>
-                <span class="dashboard-chart-kicker">Past Week</span>
-                <strong>Clients Online</strong>
-              </div>
-              <span id="dash-trend-status" class="dashboard-chart-pill">Live</span>
-            </div>
-            <div class="dashboard-chart-wrap">
-              <canvas id="dash-online-chart"></canvas>
-            </div>
-          </div>
-          <div class="dashboard-chart-card" data-dashboard-card="fleet" draggable="true">
-            <div class="dashboard-chart-head">
-              <div>
-                <span class="dashboard-chart-kicker">Fleet Mix</span>
-                <strong>Operating Systems</strong>
-              </div>
-              <span id="dash-os-leader" class="dashboard-chart-pill">None</span>
-            </div>
-            <div class="dashboard-chart-wrap dashboard-chart-wrap--donut">
-              <canvas id="dash-os-chart"></canvas>
-            </div>
-          </div>
-          <div class="dashboard-health-card" data-dashboard-card="pulse" draggable="true">
-            <div class="dashboard-chart-head">
-              <div>
-                <span class="dashboard-chart-kicker">Status</span>
-                <strong>Server Pulse</strong>
-              </div>
-              <span id="dash-last-refresh" class="dashboard-chart-pill">Waiting</span>
-            </div>
-            <div class="dashboard-health-list">
-              <div class="dashboard-health-row" data-pulse-row="api" draggable="true">
-                <span class="dashboard-live-dot is-live"></span>
-                <span>API</span>
-                <strong id="dash-api-status">Live</strong>
-              </div>
-              <div class="dashboard-health-row" data-pulse-row="memory" draggable="true">
-                <span id="dash-memory-dot" class="dashboard-live-dot is-live"></span>
-                <span>Memory</span>
-                <strong id="dash-memory-status">0%</strong>
-              </div>
-              <div class="dashboard-health-row" data-pulse-row="ping" draggable="true">
-                <span id="dash-ping-dot" class="dashboard-live-dot is-muted"></span>
-                <span>Ping Avg</span>
-                <strong id="dash-ping-status">-</strong>
+          <div id="dashboard-stats-content" class="dashboard-stats-content grid-stack">
+            <div class="grid-stack-item" data-dashboard-card="online" gs-id="online" gs-x="0" gs-y="0" gs-w="2" gs-h="2" gs-min-w="2" gs-min-h="1">
+              <div class="grid-stack-item-content dashboard-stat-card dashboard-stat-card--online">
+                <div class="dashboard-stat-topline">
+                  <span class="dashboard-live-dot is-live"></span>
+                  <span>Online</span>
+                </div>
+                <div id="dash-online-count" class="dashboard-stat-value">0</div>
+                <div class="dashboard-stat-subline">
+                  <span id="dash-total-count">0 total</span>
+                  <span id="dash-online-ratio">0%</span>
+                </div>
               </div>
             </div>
-          </div>
+            <div class="grid-stack-item" data-dashboard-card="sessions" gs-id="sessions" gs-x="2" gs-y="0" gs-w="2" gs-h="2" gs-min-w="2" gs-min-h="1">
+              <div class="grid-stack-item-content dashboard-stat-card dashboard-stat-card--sessions">
+                <div class="dashboard-stat-topline">
+                  <i class="fa-solid fa-wave-square"></i>
+                  <span>Sessions</span>
+                </div>
+                <div id="dash-session-count" class="dashboard-stat-value">0</div>
+                <div class="dashboard-stat-subline">
+                  <span id="dash-command-minute">0 cmd/min</span>
+                  <span id="dash-http-errors">0 errors</span>
+                </div>
+              </div>
+            </div>
+            <div class="grid-stack-item" data-dashboard-card="trend" gs-id="trend" gs-x="4" gs-y="0" gs-w="3" gs-h="2" gs-min-w="2" gs-min-h="1">
+              <div class="grid-stack-item-content dashboard-chart-card">
+                <div class="dashboard-chart-head">
+                  <div>
+                    <span class="dashboard-chart-kicker">Past Week</span>
+                    <strong>Clients Online</strong>
+                  </div>
+                  <span id="dash-trend-status" class="dashboard-chart-pill">Live</span>
+                </div>
+                <div class="dashboard-chart-wrap">
+                  <canvas id="dash-online-chart"></canvas>
+                </div>
+              </div>
+            </div>
+            <div class="grid-stack-item" data-dashboard-card="fleet" gs-id="fleet" gs-x="7" gs-y="0" gs-w="3" gs-h="2" gs-min-w="2" gs-min-h="1">
+              <div class="grid-stack-item-content dashboard-chart-card">
+                <div class="dashboard-chart-head">
+                  <div>
+                    <span class="dashboard-chart-kicker">Fleet Mix</span>
+                    <strong>Operating Systems</strong>
+                  </div>
+                  <span id="dash-os-leader" class="dashboard-chart-pill">None</span>
+                </div>
+                <div class="dashboard-chart-wrap dashboard-chart-wrap--donut">
+                  <canvas id="dash-os-chart"></canvas>
+                </div>
+              </div>
+            </div>
+            <div class="grid-stack-item" data-dashboard-card="pulse" gs-id="pulse" gs-x="10" gs-y="0" gs-w="2" gs-h="2" gs-min-w="2" gs-min-h="1">
+              <div class="grid-stack-item-content dashboard-health-card">
+                <div class="dashboard-chart-head">
+                  <div>
+                    <span class="dashboard-chart-kicker">Status</span>
+                    <strong>Server Pulse</strong>
+                  </div>
+                  <span id="dash-last-refresh" class="dashboard-chart-pill">Waiting</span>
+                </div>
+                <div class="dashboard-health-list">
+                  <div class="dashboard-health-row" data-pulse-row="api" draggable="true">
+                    <span class="dashboard-live-dot is-live"></span>
+                    <span>API</span>
+                    <strong id="dash-api-status">Live</strong>
+                  </div>
+                  <div class="dashboard-health-row" data-pulse-row="memory" draggable="true">
+                    <span id="dash-memory-dot" class="dashboard-live-dot is-live"></span>
+                    <span>Memory</span>
+                    <strong id="dash-memory-status">0%</strong>
+                  </div>
+                  <div class="dashboard-health-row" data-pulse-row="ping" draggable="true">
+                    <span id="dash-ping-dot" class="dashboard-live-dot is-muted"></span>
+                    <span>Ping Avg</span>
+                    <strong id="dash-ping-status">-</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
           <div
             id="dashboard-stats-resizer"
